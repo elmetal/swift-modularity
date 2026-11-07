@@ -57,4 +57,16 @@ import Testing
         let report = ModularityReport(modules: [ModuleReport(name: "P", level: .target, directory: nil, analysis: ModularityAnalysis(graph: graph))])
         #expect(DiagnosticFormatter.format(report, style: .xcode).isEmpty)
     }
+
+    @Test func extractionText() {
+        let graph = FileDependencyGraphBuilder().build(sources: [
+            (name: "App.swift", source: "func main() { _ = Log() }"),
+            (name: "Util/Log.swift", source: "struct Log { var format = Format() }"),
+            (name: "Util/Format.swift", source: "struct Format {}"),
+        ])
+        let report = ModularityReport(modules: [ModuleReport(name: "App", level: .file, directory: nil, analysis: ModularityAnalysis(graph: graph))])
+        let text = TextFormatter().format(report)
+        #expect(text.contains("Util/ (2 files): candidate lower target — depends on nothing else here; 1 dependency (1 reference) from other files would use it"))
+        #expect(report.modules[0].extractionCandidates.map(\.directory) == ["Util/"])
+    }
 }

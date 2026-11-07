@@ -71,6 +71,18 @@ references, then by name. Pairs or sets of dependencies are not searched: the sm
 removes every cycle (a minimum feedback arc set) is NP-hard, and one dependency at a time is what
 one change does.
 
+## Directories as targets
+
+`Extraction` takes every directory prefix of the file names (relative to the module) with at least
+two files and fewer than all of them. For each, it collects the dependencies leaving it and
+entering it; with none leaving, the directory is a candidate lower target, with none entering a
+candidate upper target. For blocked directories the files the directory needs, directly or
+indirectly, come from the visibility matrix (what would move with it to make a lower target).
+Candidates come first (largest first), then blocked directories by the fewest dependencies to
+remove in the cheaper direction. Directories are the only sets considered: they are how a codebase
+already groups its files, and searching all sets of files that could be split is not useful to
+report.
+
 ## Building the graphs
 
 **Targets** (`PackageDescription`, `PackageLoader`): `swift package dump-package`, or the JSON that
@@ -108,7 +120,7 @@ The accuracy of this graph against the compiler's index is measured in
 ```
 Sources/swift-modularity/
   Graph/      DependencyGraph, StronglyConnectedComponents, VisibilityMatrix (+ BitSet)
-  Analysis/   ModularityAnalysis (classification, partition, DSM order), CycleBreaking
+  Analysis/   ModularityAnalysis (classification, partition, DSM order), CycleBreaking, Extraction
   Syntax/     FileDependencyGraphBuilder (DeclarationCollector, ReferenceCollector)
   Package/    PackageDescription, PackageLoader
   Config/     ModularityConfig (modularity.toml)

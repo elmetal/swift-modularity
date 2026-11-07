@@ -121,6 +121,7 @@ struct GraphAccuracy: ParsableCommand {
             let toolAnalysis = ModularityAnalysis(graph: toolGraph2)
             let truthAnalysis = ModularityAnalysis(graph: truthGraph)
             let breaking = BreakingEvaluation(tool: toolAnalysis, truth: truthAnalysis, names: nodes.map(\.name))
+            let extraction = ExtractionEvaluation(tool: toolAnalysis, truth: truthAnalysis)
 
             results.append(ModuleResult(
                 module: module,
@@ -136,6 +137,7 @@ struct GraphAccuracy: ParsableCommand {
                 coreJaccard: coreJaccard(toolAnalysis, truthAnalysis),
                 groupAgreement: Double(zip(toolAnalysis.groups, truthAnalysis.groups).filter { $0 == $1 }.count) / Double(sortedFiles.count),
                 breaking: breaking,
+                extraction: extraction,
                 falsePositives: toolEdges.subtracting(truthAll).sorted().map {
                     ErrorEdge(from: relative($0.from, to: base), to: relative($0.to, to: base), reference: tool[$0]!)
                 },
@@ -244,6 +246,7 @@ struct ModuleResult: Codable {
     var coreJaccard: Double?
     var groupAgreement: Double
     var breaking: BreakingEvaluation
+    var extraction: ExtractionEvaluation
     var falsePositives: [ErrorEdge]
     var falseNegativesInScope: [ErrorEdge]
     var falseNegativesOutOfScope: [ErrorEdge]
@@ -349,6 +352,60 @@ struct BreakingEvaluation: Codable {
             for finding in CycleBreaking.breakingDependencies(in: truth.graph, group: group) {
                 indexBreaking += 1
                 if toolFindings.contains([finding.edge.from, finding.edge.to]) { indexBreakingFound += 1 }
+            }
+        }
+    }
+}
+
+// MARK: - Directories as targets (PROTOCOL.md, second addendum)
+
+struct ExtractionEvaluation: Codable {
+    var directories = 0
+    var lowerClaims = 0, lowerCorrect = 0, indexLower = 0, indexLowerFound = 0
+    var upperClaims = 0, upperCorrect = 0, indexUpper = 0, indexUpperFound = 0
+    var blocked = 0
+    /// Blocked directories whose listed blocking dependencies are all in the index graph.
+    var blockingAllReal = 0
+    /// Blocking dependencies the index graph has beyond the tool's, over blocked directories.
+    var extraBlocking = 0
+    var wrongClaims: [String] = []
+
+    init(tool: ModularityAnalysis, truth: ModularityAnalysis) {
+        let truthCandidates = Dictionary(uniqueKeysWithValues: Extraction.directoryCandidates(in: truth).map { ($0.directory, $0) })
+        let toolCandidates = Extraction.directoryCandidates(in: tool)
+        directories = toolCandidates.count
+        let toolByDirectory = Dictionary(uniqueKeysWithValues: toolCandidates.map { ($0.directory, $0) })
+        func pairs(_ edges: [DependencyGraph.Edge]) -> Set<[Int]> { Set(edges.map { [$0.from, $0.to] }) }
+        for candidate in toolCandidates {
+            guard let real = truthCandidates[candidate.directory] else { continue }
+            if candidate.canBeLowerTarget {
+                lowerClaims += 1
+                if real.canBeLowerTarget { lowerCorrect += 1 } else {
+                    wrongClaims.append("lower: \(candidate.directory) depends on \(real.outgoing.count) outside in the index")
+                }
+            }
+            if candidate.canBeUpperTarget {
+                upperClaims += 1
+                if real.canBeUpperTarget { upperCorrect += 1 } else {
+                    wrongClaims.append("upper: \(candidate.directory) is used by \(real.incoming.count) outside in the index")
+                }
+            }
+            if candidate.isBlocked {
+                blocked += 1
+                let toolBlocking = pairs(candidate.outgoing).union(pairs(candidate.incoming))
+                let realBlocking = pairs(real.outgoing).union(pairs(real.incoming))
+                if toolBlocking.isSubset(of: realBlocking) { blockingAllReal += 1 }
+                extraBlocking += realBlocking.subtracting(toolBlocking).count
+            }
+        }
+        for real in truthCandidates.values {
+            if real.canBeLowerTarget {
+                indexLower += 1
+                if toolByDirectory[real.directory]?.canBeLowerTarget == true { indexLowerFound += 1 }
+            }
+            if real.canBeUpperTarget {
+                indexUpper += 1
+                if toolByDirectory[real.directory]?.canBeUpperTarget == true { indexUpperFound += 1 }
             }
         }
     }

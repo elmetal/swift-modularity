@@ -77,6 +77,11 @@ public struct TextFormatter: Sendable {
             }
         }
 
+        if !module.extractionCandidates.isEmpty {
+            lines.append("")
+            lines.append(contentsOf: extraction(module))
+        }
+
         if !module.elements.isEmpty {
             lines.append("")
             lines.append("  Elements (VFI: depended on by, VFO: depends on; both count the element itself):")
@@ -110,6 +115,54 @@ public struct TextFormatter: Sendable {
             lines.append("  Unreadable files (skipped): " + module.unreadableFiles.joined(separator: ", "))
         }
         return lines.joined(separator: "\n") + "\n"
+    }
+
+    /// Directories that could become targets, then the blocked ones with what blocks them.
+    func extraction(_ module: ModuleReport) -> [String] {
+        var lines = ["  Directories as targets (dependencies may cross a target's boundary in one direction only; dependencies the tool cannot see may block a candidate):"]
+        let shown = limit > 0 ? Array(module.extractionCandidates.prefix(limit)) : module.extractionCandidates
+        for candidate in shown {
+            let files = "\(candidate.directory) (\(candidate.files.count) files)"
+            switch (candidate.canBeLowerTarget, candidate.canBeUpperTarget) {
+            case (true, true):
+                lines.append("    \(files): independent — no dependency crosses its boundary")
+            case (true, false):
+                lines.append("    \(files): candidate lower target — depends on nothing else here; "
+                             + "\(Self.count(candidate.incoming)) from other files would use it")
+            case (false, true):
+                lines.append("    \(files): candidate higher target — nothing else here depends on it; "
+                             + "it uses \(Self.count(candidate.outgoing)) into the rest")
+            case (false, false):
+                // Show the direction with fewer dependencies to remove.
+                let lower = candidate.outgoing.count <= candidate.incoming.count
+                let blocking = lower ? candidate.outgoing : candidate.incoming
+                var text = "    \(files): blocked — as a \(lower ? "lower" : "higher") target, remove \(Self.count(blocking))"
+                if lower, !candidate.requiredFiles.isEmpty {
+                    text += ", or move the \(candidate.requiredFiles.count) file\(candidate.requiredFiles.count == 1 ? "" : "s") it needs with it"
+                }
+                lines.append(text + ":")
+                for dependency in blocking.prefix(3) {
+                    var line = "        \(dependency.from) → \(dependency.to)"
+                    if let symbol = dependency.symbol, let number = dependency.line {
+                        line += "  `\(symbol)` line \(number)"
+                    }
+                    lines.append(line + " (\(dependency.references) reference\(dependency.references == 1 ? "" : "s"))")
+                }
+                if blocking.count > 3 {
+                    lines.append("        … and \(blocking.count - 3) more")
+                }
+            }
+        }
+        if shown.count < module.extractionCandidates.count {
+            lines.append("    … and \(module.extractionCandidates.count - shown.count) more directories (--limit 0 lists all)")
+        }
+        return lines
+    }
+
+    /// "3 dependencies (12 references)"
+    static func count(_ dependencies: [ModuleReport.Dependency]) -> String {
+        let references = dependencies.map(\.references).reduce(0, +)
+        return "\(dependencies.count) dependenc\(dependencies.count == 1 ? "y" : "ies") (\(references) reference\(references == 1 ? "" : "s"))"
     }
 
     /// The reordered DSM: row i depends on column j. `x` direct, `.` indirect, `#` itself.

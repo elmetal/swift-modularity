@@ -119,6 +119,22 @@ A dependency the tool cannot see (a member reached through a value) can close th
 way, which is likelier in modules whose types are extended across many files: rerun the analysis
 after the change to confirm.
 
+## Directories that could become targets
+
+Each directory of a module with two or more files is checked as a target of its own. Splitting it
+off works without a cycle between targets when dependencies cross its boundary in one direction:
+
+- **lower target**: none of its files depends on the rest of the module, so the rest can depend on
+  it (a library or layer below);
+- **higher target**: nothing else in the module depends on it, so it can depend on the rest (a
+  feature on top);
+- otherwise it is **blocked**, and the dependencies to remove in the cheaper direction are listed,
+  or the files it needs that could move with it.
+
+The references that cross the boundary are the declarations that would have to become `public`.
+These are candidates: a dependency the tool cannot see can block one; the compiler settles it
+when the directory is moved.
+
 ## How file dependencies are found
 
 Nothing is compiled: each file is parsed with [SwiftSyntax](https://github.com/swiftlang/swift-syntax),

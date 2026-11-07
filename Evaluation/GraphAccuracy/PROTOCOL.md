@@ -86,3 +86,29 @@ Measures, per module and pooled: the share of findings confirmed, with the same 
 each failure class, for all findings and for the **top findings** (those with the largest
 reduction in their group, which the Xcode / GitHub notes show). Recall: of the dependencies that
 split a group of T_all, the share the tool also reports.
+
+## Addendum: directories that could become their own target
+
+Written before measuring this finding (the `feat/extraction-candidates` branch), on the same
+corpus, index stores and graph as the previous addendum.
+
+For each directory D inside a module (any depth, with at least 2 files, not the whole module), the
+tool reports:
+
+- **lower target**: no file of D depends on a file outside D (D could become a target that the
+  rest of the module depends on);
+- **upper target**: no file outside D depends on a file of D (D could become a target that depends
+  on the rest);
+- otherwise **blocked**, with the dependencies that cross D's boundary in each direction.
+
+Measures, pooled over all modules, comparing the tool's graph with T_all on the same files:
+
+- **precision** of each claim: of the directories the tool reports as a lower (upper) target, the
+  share that are one in T_all;
+- **recall**: of the directories that are a lower (upper) target in T_all, the share the tool
+  reports;
+- for blocked directories, whether every blocking dependency the tool lists is in T_all, and how
+  many more T_all has.
+
+A wrong "lower target" claim is the costly error (the directory would not compile on its own), so
+precision of the claims is the main measure.
