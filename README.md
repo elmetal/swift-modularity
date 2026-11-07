@@ -4,9 +4,8 @@ A Swift tool that measures the dependency structure of Swift code: **propagation
 groups** and **core-periphery architecture**, computed exactly as defined in the research
 literature, at two levels: the targets of a Swift package, and the files of each module.
 
-Where [swift-similarity](https://github.com/elmetal/swift-similarity) answers "which code is
-duplicated?", swift-modularity answers "how far does a change spread, and which files are tangled
-in cycles?".
+It answers: how far can a change spread, which files are tangled in cycles, which dependency to
+remove to split a cycle, and which directories could become a target of their own.
 
 ## Installation
 
@@ -46,6 +45,9 @@ swift-modularity-cli MyApp/Sources --exclude '**/Generated/**'   # `files` is th
 swift-modularity-cli package --matrix --limit 0
 swift-modularity-cli package --format json
 ```
+
+Each module's report gives its size, propagation cost, architecture and partition, then its
+cyclic groups and its directories as targets; the excerpts below show how to read them.
 
 ## What is measured
 
@@ -107,8 +109,15 @@ for the exact definitions and how each is computed.
 
 For each cyclic group, the tool removes each dependency between two members in turn and recomputes
 the cycles among them exactly. A dependency is listed when the largest group left is smaller than
-the group, most effective first (then the fewest references to remove).
+the group, most effective first (then the fewest references to remove):
 
+```
+    1. 3 files (Core): Library/Catalog.swift, Library/Library.swift, Library/Shelf.swift
+       Removing one of these dependencies splits it:
+         Library/Catalog.swift → Library/Library.swift  `Library` line 8 (1 reference): no cycle left
+         Library/Library.swift → Library/Shelf.swift  `Shelf` line 3 (1 reference): no cycle left
+         Library/Shelf.swift → Library/Catalog.swift  `Catalog` line 2 (1 reference): no cycle left
+```
 
 A dependency is all the references from one file to the other; removing them usually means moving
 a declaration to the other file or a lower one, introducing a protocol that the lower file owns, or
@@ -118,6 +127,30 @@ that no single dependency splits.
 A dependency the tool cannot see (a member reached through a value) can close the cycle another
 way, which is likelier in modules whose types are extended across many files: rerun the analysis
 after the change to confirm.
+
+## Directories that could become targets
+
+Each directory of a module with two or more files is checked as a target of its own. Splitting it
+off works without a cycle between targets when dependencies cross its boundary in one direction:
+
+- **lower target**: none of its files depends on the rest of the module, so the rest can depend on
+  it (a library or layer below);
+- **higher target**: nothing else in the module depends on it, so it can depend on the rest (a
+  feature on top);
+- otherwise it is **blocked**, and the dependencies to remove in the cheaper direction are listed,
+  or the files it needs that could move with it.
+
+```
+  Directories as targets (...):
+    Models/ (2 files): candidate lower target — depends on nothing else here; 5 dependencies (8 references) from other files would use it
+    Util/ (2 files): candidate lower target — depends on nothing else here; 1 dependency (2 references) from other files would use it
+    Features/Search/ (2 files): blocked — as a higher target, remove 1 dependency (2 references):
+        App.swift → Features/Search/SearchView.swift  `SearchView` line 4 (2 references)
+```
+
+The references that cross the boundary are the declarations that would have to become `public`.
+These are candidates: a dependency the tool cannot see can block one; the compiler settles it
+when the directory is moved.
 
 ## How file dependencies are found
 
@@ -146,9 +179,6 @@ Parameters, local variables and generic parameters shadow other names. Known lim
 - `files` treats everything it is given as one module; analyze each module separately (or use
   `package`) so that equal names in different modules do not create false dependencies.
 
-[Evaluation/GraphAccuracy](Evaluation/GraphAccuracy) compares this graph with the dependencies in a
-compiler index store, to measure how many dependencies it misses or invents on code you choose.
-
 ## Configuration
 
 `modularity.toml` in the current directory or a parent directory sets defaults; command-line
@@ -176,7 +206,11 @@ failing exit status (invalid arguments exit with 64).
 
 ### Notes in Xcode and on pull requests
 `--format xcode` and `--format github` write a note (not a warning) at the most effective
-dependency to remove in each cyclic group, at the reference that creates it.
+dependency to remove in each cyclic group, at the reference that creates it:
+
+```
+/path/to/MyApp/Models/Book.swift:3:17: note: removing the dependency on Models/Author.swift (`Author`, 1 reference) splits cyclic group 2 of 2 files in MyApp: no cycle left [swift-modularity]
+```
 
 
 Use `xcode` in a Run Script build phase (with `ENABLE_USER_SCRIPT_SANDBOXING = NO`, or the source

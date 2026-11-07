@@ -60,6 +60,22 @@ public struct ModuleReport: Sendable, Codable, Equatable {
         public var reduction: Int
     }
 
+    /// A directory and whether it could become a target of its own (see `Extraction`).
+    public struct ExtractionCandidateReport: Sendable, Codable, Equatable {
+        public var directory: String
+        public var files: [String]
+        /// No file of the directory depends on a file outside it.
+        public var canBeLowerTarget: Bool
+        /// No file outside depends on a file of the directory.
+        public var canBeUpperTarget: Bool
+        /// Dependencies from the directory to the rest of the module.
+        public var outgoing: [Dependency]
+        /// Dependencies from the rest of the module to the directory.
+        public var incoming: [Dependency]
+        /// Files outside the directory that its files depend on, directly or indirectly.
+        public var requiredFiles: [String]
+    }
+
     public var name: String
     public var level: Level
     public var directory: String?
@@ -77,6 +93,8 @@ public struct ModuleReport: Sendable, Codable, Equatable {
     /// The elements in the order of the reordered DSM.
     public var elements: [Element]
     public var dependencies: [Dependency]
+    /// Directories that could become targets (file level only), as ordered by `Extraction`.
+    public var extractionCandidates: [ExtractionCandidateReport]
     /// Files that could not be read (file level only).
     public var unreadableFiles: [String]
 
@@ -119,6 +137,15 @@ public struct ModuleReport: Sendable, Codable, Equatable {
                     group: analysis.groups[index], cyclicGroup: analysis.cyclicGroupIndex(of: index).map { $0 + 1 })
         }
         self.dependencies = graph.edges.map(dependency)
+        self.extractionCandidates = level == .file ? Extraction.directoryCandidates(in: analysis).map { candidate in
+            ExtractionCandidateReport(directory: candidate.directory,
+                                      files: candidate.files.map { graph.nodes[$0].name },
+                                      canBeLowerTarget: candidate.canBeLowerTarget,
+                                      canBeUpperTarget: candidate.canBeUpperTarget,
+                                      outgoing: candidate.outgoing.map(dependency),
+                                      incoming: candidate.incoming.map(dependency),
+                                      requiredFiles: candidate.requiredFiles.map { graph.nodes[$0].name })
+        } : []
         self.unreadableFiles = unreadableFiles
     }
 

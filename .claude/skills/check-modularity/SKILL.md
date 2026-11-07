@@ -64,6 +64,11 @@ For each cyclic group, starting with the Core and the largest groups:
    can keep the cycle. Say what the change does to the structure (which files leave the group, whether the module could
    then be split into targets) and its risk (public API changes, behavior to preserve, tests to run).
 
+To split a module into targets, start from "Directories as targets": candidate lower targets
+become libraries below, candidate higher targets features on top; for a blocked directory, plan
+the listed dependencies to remove or the files to move with it. Say which declarations would have
+to become `public`, and that the compiler confirms a candidate only once the directory is moved.
+
 Also point out Shared files with a high VFO (foundation code depending on much) and targets whose
 propagation cost stands out. Order the plan by impact. Don't change code until the user has agreed
 to the plan, unless they asked you to go ahead.
