@@ -36,6 +36,11 @@ public class FileReader {
             guard let fileURL = element as? URL else { continue }
 
             let resourceValues = try fileURL.resourceValues(forKeys: Set(resourceKeys))
+            // DocC catalogs hold tutorial snippets, which are not compiled with the module.
+            if resourceValues.isDirectory == true && fileURL.pathExtension == "docc" {
+                enumerator.skipDescendants()
+                continue
+            }
             if !exclude.isEmpty {
                 // The enumerator's depth gives the path relative to `directory`, even when the
                 // URLs it returns resolve symbolic links in the root (such as /var → /private/var).

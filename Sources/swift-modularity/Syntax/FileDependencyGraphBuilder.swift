@@ -11,19 +11,22 @@ import SwiftSyntax
 /// - a type (struct, class, enum, actor, protocol, typealias), including a nested type written
 ///   with its qualified name (`Outer.Inner`) or by its simple name inside the type or one of its
 ///   extensions;
-/// - a top-level function, variable or macro.
+/// - a top-level function, variable or macro;
+/// - a member (method, property, enum case, nested type) reached through implicit `self` inside a
+///   type or one of its extensions, through `self.` or `Self.`, or through a type name
+///   (`Parser.shared`). Members inherited from protocols and superclasses declared in the module
+///   are found too.
 ///
-/// An extension depends on the file that declares the extended type. Nothing is compiled or
-/// type-checked, so the graph is an approximation, with known limits:
+/// `private` and `fileprivate` declarations are visible only in their own file. An extension
+/// depends on the file that declares the extended type. Nothing is compiled or type-checked, so the
+/// graph is an approximation, with known limits:
 ///
-/// - Members are not resolved: calling a method that an extension in another file adds
-///   (`value.helper()`) does not create a dependency on that file. Member access through a
-///   type name (`Parser.default`) depends on the file that declares the type.
-/// - Names are matched by text. Local variables, parameters, generic parameters and members of
-///   the enclosing types shadow top-level names; members inherited from superclasses or
-///   protocols do not.
-/// - Declarations inside `#if` blocks count whatever the condition.
-/// - A name declared in several files (overloaded top-level functions) depends on all of them.
+/// - Members reached through a value (`value.helper()`) or an implicit member expression
+///   (`.helper`) are not resolved: that needs the type of the value.
+/// - Names are matched by text. Local variables, parameters and generic parameters shadow other
+///   names; overloads are not told apart, so a name declared in several files depends on all of
+///   them.
+/// - Declarations and references inside `#if` blocks count whatever the condition.
 public struct FileDependencyGraphBuilder: Sendable {
     public init() {}
 
@@ -41,27 +44,15 @@ public struct FileDependencyGraphBuilder: Sendable {
     public func build(files: [String], relativeTo baseDirectory: String? = nil) async -> Result {
         let parsed = await files.concurrentMap { path -> ParsedFile? in
             guard let source = try? String(contentsOfFile: path, encoding: .utf8) else { return nil }
-            let tree = Parser.parse(source: source)
-            let collector = DeclarationCollector(viewMode: .sourceAccurate)
-            collector.walk(tree)
-            return ParsedFile(path: path, tree: tree, declarations: collector.declarations)
+            return ParsedFile(path: path, source: source)
         }
         let readable = parsed.compactMap { $0 }
         let unreadable = zip(files, parsed).filter { $0.1 == nil }.map(\.0)
 
-        var symbols = SymbolTable()
-        for (index, file) in readable.enumerated() {
-            symbols.add(file.declarations, file: index)
+        let symbols = SymbolTable(readable.map(\.declarations))
+        let edges = await readable.enumerated().map { ($0, $1) }.concurrentMap { index, file in
+            file.references(symbols: symbols, index: index)
         }
-
-        let table = symbols
-        let edges = await readable.enumerated().map { ($0, $1) }.concurrentMap { index, file -> [DependencyGraph.Edge] in
-            let converter = SourceLocationConverter(fileName: file.path, tree: file.tree)
-            let collector = ReferenceCollector(symbols: table, file: index, converter: converter)
-            collector.walk(file.tree)
-            return collector.edges
-        }
-
         let nodes = readable.map { file in
             DependencyGraph.Node(name: Self.displayPath(file.path, relativeTo: baseDirectory), path: file.path)
         }
@@ -70,23 +61,9 @@ public struct FileDependencyGraphBuilder: Sendable {
 
     /// Builds the graph of in-memory sources, for tests. Node names are the keys.
     public func build(sources: [(name: String, source: String)]) -> DependencyGraph {
-        let parsed = sources.map { name, source -> ParsedFile in
-            let tree = Parser.parse(source: source)
-            let collector = DeclarationCollector(viewMode: .sourceAccurate)
-            collector.walk(tree)
-            return ParsedFile(path: name, tree: tree, declarations: collector.declarations)
-        }
-        var symbols = SymbolTable()
-        for (index, file) in parsed.enumerated() {
-            symbols.add(file.declarations, file: index)
-        }
-        var edges: [DependencyGraph.Edge] = []
-        for (index, file) in parsed.enumerated() {
-            let converter = SourceLocationConverter(fileName: file.path, tree: file.tree)
-            let collector = ReferenceCollector(symbols: symbols, file: index, converter: converter)
-            collector.walk(file.tree)
-            edges += collector.edges
-        }
+        let parsed = sources.map { ParsedFile(path: $0.name, source: $0.source) }
+        let symbols = SymbolTable(parsed.map(\.declarations))
+        let edges = parsed.enumerated().flatMap { index, file in file.references(symbols: symbols, index: index) }
         return DependencyGraph(nodes: parsed.map { DependencyGraph.Node(name: $0.path, path: $0.path) }, edges: edges)
     }
 
@@ -103,36 +80,130 @@ private struct ParsedFile: @unchecked Sendable {
     var path: String
     var tree: SourceFileSyntax
     var declarations: Declarations
+
+    init(path: String, source: String) {
+        self.path = path
+        tree = Parser.parse(source: source)
+        let collector = DeclarationCollector(viewMode: .sourceAccurate)
+        collector.walk(tree)
+        declarations = collector.declarations
+    }
+
+    func references(symbols: SymbolTable, index: Int) -> [DependencyGraph.Edge] {
+        let converter = SourceLocationConverter(fileName: path, tree: tree)
+        let collector = ReferenceCollector(symbols: symbols, own: declarations, file: index, converter: converter)
+        collector.walk(tree)
+        return collector.edges
+    }
 }
 
 // MARK: - Declarations
 
 /// What one file declares.
 struct Declarations: Sendable {
-    /// Qualified type names (`Outer.Inner`).
+    /// Qualified type names (`Outer.Inner`), file-private ones included.
     var types: Set<String> = []
-    /// Top-level functions, variables and macros.
+    /// Top-level functions, variables and macros, file-private ones included.
     var values: Set<String> = []
-    /// Member names (methods, properties, enum cases, associated types) by qualified type name,
-    /// including members declared in extensions.
-    var members: [String: Set<String>] = [:]
+    /// The subsets of `types` and `values` declared `private` or `fileprivate` (or inside such a
+    /// type): other files cannot refer to them.
+    var privateTypes: Set<String> = []
+    var privateValues: Set<String> = []
+    /// Members by qualified type name, including members declared in extensions.
+    var members: [String: [Member]] = [:]
+    /// Inheritance clauses of types and extensions.
+    var inheritance: [Inheritance] = []
+
+    struct Member: Sendable {
+        var name: String
+        var shape: MemberShape
+        /// Whether other files can refer to it (not file-private).
+        var isVisible: Bool
+    }
+
+    struct Inheritance: Sendable {
+        /// The qualified name of the type (or the extended type).
+        var type: String
+        /// Where the clause is written, to resolve the names in it.
+        var context: [String]
+        /// The inherited names, as `["Outer", "Proto"]` for `Outer.Proto`.
+        var inherited: [[String]]
+    }
 }
 
+/// The declarations of every file of the module.
 struct SymbolTable: Sendable {
-    var types: [String: Set<Int>] = [:]
-    var values: [String: Set<Int>] = [:]
-    var members: [String: Set<String>] = [:]
+    /// Files declaring each type or top-level value that other files can refer to.
+    private(set) var types: [String: Set<Int>] = [:]
+    private(set) var values: [String: Set<Int>] = [:]
+    /// The declarations of each member, by type, then name.
+    private(set) var members: [String: [String: [(file: Int, member: Declarations.Member)]]] = [:]
+    /// The protocols and superclasses (declared in the module) of each type.
+    private(set) var supertypes: [String: Set<String>] = [:]
 
-    mutating func add(_ declarations: Declarations, file: Int) {
-        for name in declarations.types {
-            types[name, default: []].insert(file)
+    init(_ files: [Declarations]) {
+        for (file, declarations) in files.enumerated() {
+            for name in declarations.types.subtracting(declarations.privateTypes) {
+                types[name, default: []].insert(file)
+            }
+            for name in declarations.values.subtracting(declarations.privateValues) {
+                values[name, default: []].insert(file)
+            }
+            for (type, list) in declarations.members {
+                for member in list {
+                    members[type, default: [:]][member.name, default: []].append((file, member))
+                }
+            }
         }
-        for name in declarations.values {
-            values[name, default: []].insert(file)
+        for declarations in files {
+            for clause in declarations.inheritance {
+                for inherited in clause.inherited {
+                    if let name = resolveType(inherited, from: clause.context, own: declarations) {
+                        supertypes[clause.type, default: []].insert(name)
+                    }
+                }
+            }
         }
-        for (type, names) in declarations.members {
-            members[type, default: []].formUnion(names)
+    }
+
+    /// The qualified name of a type written as `components` in `context`: `Inner` inside `Outer`
+    /// is `Outer.Inner` if that exists. Types of `own` (including file-private ones) come first.
+    func resolveType(_ components: [String], from context: [String], own: Declarations) -> String? {
+        for length in stride(from: context.count, through: 0, by: -1) {
+            let name = (context.prefix(length) + components).joined(separator: ".")
+            if own.types.contains(name) || types[name] != nil {
+                return name
+            }
         }
+        return nil
+    }
+
+    /// The files declaring the members named `name` of `type` that fit `use`, or nil if `type`
+    /// has no member named `name`.
+    ///
+    /// As in Swift's name lookup, the type itself (with its extensions) comes first, then its
+    /// protocols and superclasses, level by level: the nearest level with a member that fits wins,
+    /// so a type's own `title` hides the protocol requirement it implements. The set may be
+    /// empty: a file-private member of another file is still a member, but not visible here.
+    func member(_ name: String, of type: String, use: MemberUse) -> Set<Int>? {
+        var visited: Set<String> = []
+        var level = [type]
+        var isMember = false
+        while !level.isEmpty {
+            var files: Set<Int> = []
+            var fits = false
+            for current in level where visited.insert(current).inserted {
+                for (file, member) in members[current]?[name] ?? [] {
+                    isMember = true
+                    guard member.shape.fits(use) else { continue }
+                    fits = true
+                    if member.isVisible { files.insert(file) }
+                }
+            }
+            if fits { return files }
+            level = level.flatMap { supertypes[$0] ?? [] }.filter { !visited.contains($0) }
+        }
+        return isMember ? [] : nil
     }
 }
 
@@ -140,84 +211,111 @@ struct SymbolTable: Sendable {
 /// skipped: what they declare is local.
 final class DeclarationCollector: SyntaxVisitor {
     private(set) var declarations = Declarations()
-    /// The qualified name of each enclosing type or extension.
-    private var context: [[String]] = []
+    /// Each enclosing type or extension: its qualified name and whether it is file-private.
+    private var context: [(path: [String], isPrivate: Bool)] = []
 
-    private var path: [String] { context.last ?? [] }
+    private var path: [String] { context.last?.path ?? [] }
+    private var inPrivateScope: Bool { context.last?.isPrivate ?? false }
 
-    private func declareType(_ name: TokenSyntax) -> [String] {
-        let qualified = path + [name.identifierText]
-        declarations.types.insert(qualified.joined(separator: "."))
-        if !path.isEmpty {
-            declarations.members[path.joined(separator: "."), default: []].insert(name.identifierText)
-        }
-        return qualified
+    private func declareMember(_ name: String, shape: MemberShape = .value, isPrivate: Bool) {
+        let type = path.joined(separator: ".")
+        declarations.members[type, default: []].append(.init(name: name, shape: shape, isVisible: !isPrivate && !inPrivateScope))
     }
 
-    private func declareValue(_ name: String) {
+    private func enterType(_ name: TokenSyntax, modifiers: DeclModifierListSyntax, inheritance: InheritanceClauseSyntax?) {
+        let isPrivate = modifiers.isFilePrivate || inPrivateScope
+        let qualified = path + [name.identifierText]
+        let key = qualified.joined(separator: ".")
+        declarations.types.insert(key)
+        if isPrivate { declarations.privateTypes.insert(key) }
+        if !path.isEmpty { declareMember(name.identifierText, shape: .type, isPrivate: isPrivate) }
+        recordInheritance(of: key, clause: inheritance)
+        context.append((qualified, isPrivate))
+    }
+
+    private func recordInheritance(of type: String, clause: InheritanceClauseSyntax?) {
+        let inherited = clause?.inheritedTypes.compactMap { $0.type.qualifiedComponents } ?? []
+        if !inherited.isEmpty {
+            declarations.inheritance.append(.init(type: type, context: path, inherited: inherited))
+        }
+    }
+
+    private func declareValue(_ name: String, shape: MemberShape = .value, modifiers: DeclModifierListSyntax) {
         if path.isEmpty {
             declarations.values.insert(name)
+            if modifiers.isFilePrivate { declarations.privateValues.insert(name) }
         } else {
-            declarations.members[path.joined(separator: "."), default: []].insert(name)
+            declareMember(name, shape: shape, isPrivate: modifiers.isFilePrivate)
         }
     }
 
     override func visit(_ node: StructDeclSyntax) -> SyntaxVisitorContinueKind {
-        context.append(declareType(node.name)); return .visitChildren
+        enterType(node.name, modifiers: node.modifiers, inheritance: node.inheritanceClause); return .visitChildren
     }
     override func visitPost(_ node: StructDeclSyntax) { context.removeLast() }
 
     override func visit(_ node: ClassDeclSyntax) -> SyntaxVisitorContinueKind {
-        context.append(declareType(node.name)); return .visitChildren
+        enterType(node.name, modifiers: node.modifiers, inheritance: node.inheritanceClause); return .visitChildren
     }
     override func visitPost(_ node: ClassDeclSyntax) { context.removeLast() }
 
     override func visit(_ node: EnumDeclSyntax) -> SyntaxVisitorContinueKind {
-        context.append(declareType(node.name)); return .visitChildren
+        enterType(node.name, modifiers: node.modifiers, inheritance: node.inheritanceClause); return .visitChildren
     }
     override func visitPost(_ node: EnumDeclSyntax) { context.removeLast() }
 
     override func visit(_ node: ActorDeclSyntax) -> SyntaxVisitorContinueKind {
-        context.append(declareType(node.name)); return .visitChildren
+        enterType(node.name, modifiers: node.modifiers, inheritance: node.inheritanceClause); return .visitChildren
     }
     override func visitPost(_ node: ActorDeclSyntax) { context.removeLast() }
 
     override func visit(_ node: ProtocolDeclSyntax) -> SyntaxVisitorContinueKind {
-        context.append(declareType(node.name)); return .visitChildren
+        enterType(node.name, modifiers: node.modifiers, inheritance: node.inheritanceClause); return .visitChildren
     }
     override func visitPost(_ node: ProtocolDeclSyntax) { context.removeLast() }
 
     override func visit(_ node: ExtensionDeclSyntax) -> SyntaxVisitorContinueKind {
         guard let extended = node.extendedType.qualifiedComponents else { return .skipChildren }
-        context.append(extended); return .visitChildren
+        recordInheritance(of: extended.joined(separator: "."), clause: node.inheritanceClause)
+        // Members of a `private extension` are file-private.
+        context.append((extended, node.modifiers.isFilePrivate))
+        return .visitChildren
     }
     override func visitPost(_ node: ExtensionDeclSyntax) {
         if node.extendedType.qualifiedComponents != nil { context.removeLast() }
     }
 
     override func visit(_ node: TypeAliasDeclSyntax) -> SyntaxVisitorContinueKind {
-        _ = declareType(node.name); return .skipChildren
+        let isPrivate = node.modifiers.isFilePrivate || inPrivateScope
+        let key = (path + [node.name.identifierText]).joined(separator: ".")
+        declarations.types.insert(key)
+        if isPrivate { declarations.privateTypes.insert(key) }
+        if !path.isEmpty { declareMember(node.name.identifierText, shape: .type, isPrivate: isPrivate) }
+        return .skipChildren
     }
 
     override func visit(_ node: AssociatedTypeDeclSyntax) -> SyntaxVisitorContinueKind {
-        declareValue(node.name.identifierText); return .skipChildren
+        declareValue(node.name.identifierText, modifiers: node.modifiers); return .skipChildren
     }
 
     override func visit(_ node: FunctionDeclSyntax) -> SyntaxVisitorContinueKind {
         if case .identifier = node.name.tokenKind {
-            declareValue(node.name.identifierText)
+            let parameters = node.signature.parameterClause.parameters.map {
+                MemberShape.Parameter(label: $0.firstName.argumentLabel, hasDefault: $0.defaultValue != nil || $0.ellipsis != nil)
+            }
+            declareValue(node.name.identifierText, shape: .function(parameters), modifiers: node.modifiers)
         }
         return .skipChildren
     }
 
     override func visit(_ node: MacroDeclSyntax) -> SyntaxVisitorContinueKind {
-        declareValue(node.name.identifierText); return .skipChildren
+        declareValue(node.name.identifierText, modifiers: node.modifiers); return .skipChildren
     }
 
     override func visit(_ node: VariableDeclSyntax) -> SyntaxVisitorContinueKind {
         for binding in node.bindings {
             for name in binding.pattern.boundNames {
-                declareValue(name)
+                declareValue(name, modifiers: node.modifiers)
             }
         }
         return .skipChildren
@@ -225,7 +323,13 @@ final class DeclarationCollector: SyntaxVisitor {
 
     override func visit(_ node: EnumCaseDeclSyntax) -> SyntaxVisitorContinueKind {
         for element in node.elements {
-            declareValue(element.name.identifierText)
+            // A case with associated values is called like a function: `.failure(error)`.
+            let shape = element.parameterClause.map { clause in
+                MemberShape.enumCase(clause.parameters.map {
+                    MemberShape.Parameter(label: $0.firstName?.argumentLabel, hasDefault: $0.defaultValue != nil)
+                })
+            } ?? .value
+            declareValue(element.name.identifierText, shape: shape, modifiers: node.modifiers)
         }
         return .skipChildren
     }
@@ -243,6 +347,7 @@ final class DeclarationCollector: SyntaxVisitor {
 /// Collects the dependencies of one file on the other files.
 final class ReferenceCollector: SyntaxVisitor {
     private let symbols: SymbolTable
+    private let own: Declarations
     private let file: Int
     private let converter: SourceLocationConverter
     /// The first reference to each file, and the number of references.
@@ -254,8 +359,9 @@ final class ReferenceCollector: SyntaxVisitor {
     /// How many function-like bodies enclose the current node (where patterns bind locals).
     private var bodyDepth = 0
 
-    init(symbols: SymbolTable, file: Int, converter: SourceLocationConverter) {
+    init(symbols: SymbolTable, own: Declarations, file: Int, converter: SourceLocationConverter) {
         self.symbols = symbols
+        self.own = own
         self.file = file
         self.converter = converter
         super.init(viewMode: .sourceAccurate)
@@ -275,29 +381,24 @@ final class ReferenceCollector: SyntaxVisitor {
         scopes.contains { $0.contains(name) }
     }
 
-    /// Whether `name` is a member of an enclosing type (so an unqualified use refers to it).
-    private func isMemberOfEnclosingType(_ name: String) -> Bool {
+    /// The enclosing type of which `name` is a member (innermost first), with the files declaring
+    /// the member, or nil if it is not a member of an enclosing type.
+    private func enclosingMember(_ name: String, use: MemberUse) -> (type: String, files: Set<Int>)? {
         let path = self.path
-        guard !path.isEmpty else { return false }
         for length in stride(from: path.count, through: 1, by: -1) {
-            if symbols.members[path.prefix(length).joined(separator: "."), default: []].contains(name) {
-                return true
-            }
-        }
-        return false
-    }
-
-    /// The files declaring a type written as `components` here: `Inner` inside `Outer` is
-    /// `Outer.Inner` if that exists.
-    private func resolveType(_ components: [String]) -> Set<Int>? {
-        let path = self.path
-        for length in stride(from: path.count, through: 0, by: -1) {
-            let name = (path.prefix(length) + components).joined(separator: ".")
-            if let files = symbols.types[name] {
-                return files
+            let type = path.prefix(length).joined(separator: ".")
+            if let files = symbols.member(name, of: type, use: use) {
+                return (type, files)
             }
         }
         return nil
+    }
+
+    /// The qualified name of a type written as `components` here, and the files declaring it
+    /// (none when this file declares it).
+    private func resolveType(_ components: [String]) -> (name: String, files: Set<Int>)? {
+        guard let name = symbols.resolveType(components, from: path, own: own) else { return nil }
+        return (name, own.types.contains(name) ? [] : symbols.types[name] ?? [])
     }
 
     private func record(_ files: Set<Int>, symbol: String, at node: some SyntaxProtocol) {
@@ -309,11 +410,6 @@ final class ReferenceCollector: SyntaxVisitor {
                 found[target] = (DependencyGraph.Reference(symbol: symbol, line: location.line, column: location.column), 1)
             }
         }
-    }
-
-    private func referenceType(named name: String, at node: some SyntaxProtocol) {
-        guard !isLocal(name), let files = resolveType([name]) else { return }
-        record(files, symbol: name, at: node)
     }
 
     // MARK: Types and extensions
@@ -357,7 +453,6 @@ final class ReferenceCollector: SyntaxVisitor {
         // The extended type is resolved outside the extension's own context.
         walk(node.extendedType)
         let extended = node.extendedType.qualifiedComponents
-        // `extension Inner` inside nothing refers to a top-level type; qualified names as written.
         context.append(extended ?? path)
         scopes.append([])
         for child in [Syntax(node.attributes), node.inheritanceClause.map(Syntax.init), node.genericWhereClause.map(Syntax.init), Syntax(node.memberBlock)].compactMap({ $0 }) {
@@ -366,6 +461,16 @@ final class ReferenceCollector: SyntaxVisitor {
         context.removeLast()
         scopes.removeLast()
         return .skipChildren
+    }
+
+    /// Attributes whose arguments are names of other kinds, not references to declarations.
+    private static let opaqueAttributes: Set<String> = ["_spi", "_spi_available", "objc", "_silgen_name", "_cdecl", "_originallyDefinedIn", "_documentation"]
+
+    override func visit(_ node: AttributeSyntax) -> SyntaxVisitorContinueKind {
+        if let name = node.attributeName.as(IdentifierTypeSyntax.self)?.name.text, Self.opaqueAttributes.contains(name) {
+            return .skipChildren
+        }
+        return .visitChildren
     }
 
     // MARK: Function-like scopes
@@ -452,7 +557,6 @@ final class ReferenceCollector: SyntaxVisitor {
     override func visit(_ node: OptionalBindingConditionSyntax) -> SyntaxVisitorContinueKind {
         if node.initializer == nil, bodyDepth > 0, !scopes.isEmpty,
            let name = node.pattern.as(IdentifierPatternSyntax.self)?.identifier.identifierText {
-            // The name refers to the outer variable, which is already local or a member.
             scopes[scopes.count - 1].insert(name)
         }
         return .visitChildren
@@ -462,7 +566,10 @@ final class ReferenceCollector: SyntaxVisitor {
 
     override func visit(_ node: IdentifierTypeSyntax) -> SyntaxVisitorContinueKind {
         if case .identifier = node.name.tokenKind {
-            referenceType(named: node.name.identifierText, at: node)
+            let name = node.name.identifierText
+            if !isLocal(name), let type = resolveType([name]) {
+                record(type.files, symbol: name, at: node)
+            }
         }
         return .visitChildren
     }
@@ -470,65 +577,184 @@ final class ReferenceCollector: SyntaxVisitor {
     override func visit(_ node: MemberTypeSyntax) -> SyntaxVisitorContinueKind {
         // `Outer.Inner`: the base is visited as an identifier type; this adds the nested type.
         if let components = TypeSyntax(node).qualifiedComponents, !isLocal(components[0]) {
-            resolvePrefix(components, at: node)
+            for length in stride(from: components.count, through: 2, by: -1) {
+                if let type = resolveType(Array(components.prefix(length))) {
+                    record(type.files, symbol: type.name, at: node)
+                    break
+                }
+            }
         }
         return .visitChildren
     }
 
     override func visit(_ node: MemberAccessExprSyntax) -> SyntaxVisitorContinueKind {
-        // `Outer.Inner.make()`: a nested type used in an expression.
-        if let components = ExprSyntax(node).qualifiedComponents, components.count >= 2, !isLocal(components[0]),
-           !isMemberOfEnclosingType(components[0]) {
-            resolvePrefix(components, at: node)
+        // Only the outermost access of a chain: `A.b.c` is handled once, as a whole.
+        if let parent = node.parent?.as(MemberAccessExprSyntax.self), parent.base?.id == node.id {
+            return .visitChildren
+        }
+        let memberName = node.declName.baseName.identifierText
+
+        // `self.member`, `Self.member`
+        if let base = node.base?.as(DeclReferenceExprSyntax.self),
+           base.baseName.tokenKind == .keyword(.self) || base.baseName.tokenKind == .keyword(.Self) {
+            if !path.isEmpty, let files = symbols.member(memberName, of: path.joined(separator: "."), use: MemberUse(ExprSyntax(node))) {
+                record(files, symbol: "\(path.last!).\(memberName)", at: node)
+            }
+            return .visitChildren
+        }
+
+        // `Type.member`, `Outer.Inner.member`, `Outer.Inner()`: the longest prefix that is a type,
+        // then the member after it.
+        guard let base = node.base, let baseComponents = base.qualifiedComponents,
+              !isLocal(baseComponents[0]), enclosingMember(baseComponents[0], use: .value) == nil else {
+            return .visitChildren
+        }
+        let components = baseComponents + [memberName]
+        for length in stride(from: components.count, through: 1, by: -1) {
+            guard let type = resolveType(Array(components.prefix(length))) else { continue }
+            if length >= 2 {
+                record(type.files, symbol: type.name, at: node)
+            }
+            let use = length == components.count - 1 ? MemberUse(ExprSyntax(node)) : .value
+            if length < components.count, let files = symbols.member(components[length], of: type.name, use: use) {
+                record(files, symbol: "\(type.name).\(components[length])", at: node)
+            }
+            break
         }
         return .visitChildren
     }
 
-    /// Records the longest prefix of two or more components that names a type.
-    private func resolvePrefix(_ components: [String], at node: some SyntaxProtocol) {
-        for length in stride(from: components.count, through: 2, by: -1) {
-            let prefix = Array(components.prefix(length))
-            if let files = resolveType(prefix) {
-                record(files, symbol: prefix.joined(separator: "."), at: node)
-                return
-            }
-        }
-    }
-
     override func visit(_ node: DeclReferenceExprSyntax) -> SyntaxVisitorContinueKind {
         guard case .identifier = node.baseName.tokenKind else { return .visitChildren }
-        // `value.name`: a member, not resolved.
+        // `value.name`: handled with the member access, if at all.
         if let access = node.parent?.as(MemberAccessExprSyntax.self), access.declName.id == node.id {
             return .visitChildren
         }
         let name = node.baseName.identifierText
-        guard !isLocal(name), !isMemberOfEnclosingType(name) else { return .visitChildren }
-        if let files = resolveType([name]) {
-            record(files, symbol: name, at: node)
-        } else if let files = symbols.values[name] {
+        guard !isLocal(name) else { return .visitChildren }
+        // A member of an enclosing type (implicit `self`) shadows top-level names.
+        if let member = enclosingMember(name, use: MemberUse(ExprSyntax(node))) {
+            record(member.files, symbol: "\(member.type.split(separator: ".").last!).\(name)", at: node)
+            return .visitChildren
+        }
+        if let type = resolveType([name]) {
+            record(type.files, symbol: name, at: node)
+        } else if !own.values.contains(name), let files = symbols.values[name] {
             record(files, symbol: name, at: node)
         }
         return .visitChildren
     }
 
     override func visit(_ node: MacroExpansionExprSyntax) -> SyntaxVisitorContinueKind {
-        if let files = symbols.values[node.macroName.identifierText] {
-            record(files, symbol: "#" + node.macroName.identifierText, at: node)
-        }
+        recordMacro(node.macroName, at: node)
         return .visitChildren
     }
 
     override func visit(_ node: MacroExpansionDeclSyntax) -> SyntaxVisitorContinueKind {
-        if let files = symbols.values[node.macroName.identifierText] {
-            record(files, symbol: "#" + node.macroName.identifierText, at: node)
-        }
+        recordMacro(node.macroName, at: node)
         return .visitChildren
+    }
+
+    private func recordMacro(_ name: TokenSyntax, at node: some SyntaxProtocol) {
+        let text = name.identifierText
+        if !own.values.contains(text), let files = symbols.values[text] {
+            record(files, symbol: "#" + text, at: node)
+        }
+    }
+}
+
+// MARK: - Overloads
+
+/// What a member declaration accepts, to tell overloads apart by their argument labels.
+enum MemberShape: Sendable {
+    struct Parameter: Sendable {
+        /// The argument label; nil for `_`.
+        var label: String?
+        /// Whether a call may leave the argument out (default value or variadic).
+        var hasDefault: Bool
+    }
+
+    /// A property, a case without associated values or an associated type.
+    case value
+    /// A nested type or typealias: used as a value, called as an initializer, or as a type.
+    case type
+    case function([Parameter])
+    case enumCase([Parameter])
+
+    func fits(_ use: MemberUse) -> Bool {
+        switch (self, use) {
+        case (.type, _):
+            return true
+        case (.value, .value):
+            return true
+        case (.value, .call(let labels, _)):
+            // Calling a property of function type: closures take no argument labels.
+            return labels.allSatisfy { $0 == nil }
+        case (.function, .value):
+            // An unapplied method reference (`map(transform)`) is rare; a property is likelier.
+            return false
+        case (.enumCase, .value):
+            return true
+        case (.function(let parameters), .call(let labels, let trailingClosures)),
+             (.enumCase(let parameters), .call(let labels, let trailingClosures)):
+            return Self.match(parameters[...], labels[...], trailingClosures: trailingClosures)
+        }
+    }
+
+    /// Whether the arguments can be assigned to the parameters in order, leaving out only
+    /// parameters with defaults. Trailing closures may take any of the remaining parameters.
+    private static func match(_ parameters: ArraySlice<Parameter>, _ labels: ArraySlice<String?>, trailingClosures: Int) -> Bool {
+        guard let parameter = parameters.first else { return labels.isEmpty && trailingClosures == 0 }
+        if let label = labels.first, label == parameter.label,
+           match(parameters.dropFirst(), labels.dropFirst(), trailingClosures: trailingClosures) {
+            return true
+        }
+        if labels.isEmpty, trailingClosures > 0,
+           match(parameters.dropFirst(), labels, trailingClosures: trailingClosures - 1) {
+            return true
+        }
+        return parameter.hasDefault && match(parameters.dropFirst(), labels, trailingClosures: trailingClosures)
+    }
+}
+
+/// How a member is used where it is referenced.
+enum MemberUse: Sendable {
+    case value
+    /// Called with these argument labels (nil for unlabeled) and trailing closures.
+    case call([String?], trailingClosures: Int)
+
+    init(_ expression: ExprSyntax) {
+        if let call = expression.parent?.as(FunctionCallExprSyntax.self), call.calledExpression.id == expression.id {
+            self = .call(call.arguments.map { $0.label?.identifierText },
+                         trailingClosures: (call.trailingClosure == nil ? 0 : 1) + call.additionalTrailingClosures.count)
+        } else if let names = expression.as(DeclReferenceExprSyntax.self)?.argumentNames
+                    ?? expression.as(MemberAccessExprSyntax.self)?.declName.argumentNames {
+            // A compound name such as `parse(_:into:)`.
+            self = .call(names.arguments.map { $0.name.tokenKind == .wildcard ? nil : $0.name.identifierText }, trailingClosures: 0)
+        } else {
+            self = .value
+        }
     }
 }
 
 // MARK: - Helpers
 
+extension DeclModifierListSyntax {
+    /// `private` or `fileprivate` (but not `private(set)`, which only restricts writes).
+    var isFilePrivate: Bool {
+        contains { modifier in
+            modifier.detail == nil
+                && (modifier.name.tokenKind == .keyword(.private) || modifier.name.tokenKind == .keyword(.fileprivate))
+        }
+    }
+}
+
 extension TokenSyntax {
+    /// The argument label of a parameter's first name: nil for `_`.
+    var argumentLabel: String? {
+        tokenKind == .wildcard ? nil : identifierText
+    }
+
     /// The text of an identifier without the backticks of an escaped identifier.
     var identifierText: String {
         let text = self.text

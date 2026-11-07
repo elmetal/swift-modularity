@@ -71,15 +71,27 @@ are outside the system.
 **Files** (`FileDependencyGraphBuilder`): two passes over the SwiftSyntax trees, parsed in parallel.
 
 1. `DeclarationCollector` records each file's qualified type names (`Outer.Inner`), top-level
-   functions, variables and macros, and the member names of every type (including those declared
-   in extensions). Function bodies are skipped: what they declare is local.
-2. `ReferenceCollector` walks each file with a stack of enclosing types and a stack of local scopes
+   functions, variables and macros, the members of every type (including those declared in
+   extensions) with their shape (a value, a nested type, or a function or enum case with its
+   parameters' labels and defaults), the inheritance clauses, and which declarations are
+   file-private (`private`, `fileprivate`, inside a private type or a `private extension`).
+   Function bodies are skipped: what they declare is local.
+2. `SymbolTable` merges the files: only declarations other files can see are entered, and the
+   names in inheritance clauses are resolved to the module's protocols and superclasses.
+3. `ReferenceCollector` walks each file with a stack of enclosing types and a stack of local scopes
    (parameters, generic parameters, pattern bindings, closure parameters, implicit `newValue`,
    `oldValue` and `error`). A type name `X` inside `A.B` resolves to `A.B.X`, `A.X` or `X`, the
-   first that exists. `A.B` written as a member type or member access resolves its longest prefix
-   that is a type. An unqualified value name that is local or a member of an enclosing type is not
-   a dependency; otherwise it resolves to a type, then to a top-level value. The first reference
-   to each other file is kept, with its line and column, and references are counted.
+   first that exists (the file's own declarations first). An unqualified value name that is not
+   local is looked up as a member of the enclosing types, innermost first, then as a type, then as
+   a top-level value. `self.m` and `Self.m` look up `m` in the innermost type; `A.B.m` resolves the
+   longest prefix that is a type, then `m` as its member. Member lookup goes level by level: the
+   type and its extensions, then its supertypes; the first level with a member whose shape fits
+   the use (a call's argument labels and trailing closures, or a plain value) wins, as in Swift's
+   lookup. Arguments of `@_spi`, `@objc` and similar attributes are not references. The first
+   reference to each other file is kept, with its line and column, and references are counted.
+
+The accuracy of this graph against the compiler's index is measured in
+[Evaluation/GraphAccuracy](Evaluation/GraphAccuracy).
 
 ## Layout
 
