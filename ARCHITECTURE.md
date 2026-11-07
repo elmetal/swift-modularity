@@ -125,7 +125,7 @@ Sources/swift-modularity/
   Package/    PackageDescription, PackageLoader
   Config/     ModularityConfig (modularity.toml)
   Output/     ModularityReport (JSON model), TextFormatter, DiagnosticFormatter (notes)
-  Utils/      FileReader, ExcludePattern (shared with swift-similarity), concurrentMap
+  Utils/      FileReader, ExcludePattern, concurrentMap
 Sources/swift-modularity-cli/   `files` and `package` commands
 Plugins/ModularityPlugin/       `swift package modularity`
 ```

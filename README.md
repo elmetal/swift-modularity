@@ -4,9 +4,8 @@ A Swift tool that measures the dependency structure of Swift code: **propagation
 groups** and **core-periphery architecture**, computed exactly as defined in the research
 literature, at two levels: the targets of a Swift package, and the files of each module.
 
-Where [swift-similarity](https://github.com/elmetal/swift-similarity) answers "which code is
-duplicated?", swift-modularity answers "how far does a change spread, and which files are tangled
-in cycles?".
+It answers: how far can a change spread, which files are tangled in cycles, which dependency to
+remove to split a cycle, and which directories could become a target of their own.
 
 ## Installation
 
