@@ -47,6 +47,23 @@ swift-modularity-cli package --matrix --limit 0
 swift-modularity-cli package --format json
 ```
 
+Example, on [`Examples/Bookshelf`](Examples/Bookshelf), a made-up module
+(`swift-modularity-cli files Examples/Bookshelf`):
+
+```
+Bookshelf (files) — Examples/Bookshelf
+  10 files, 16 dependencies
+  Propagation cost: 50.0%
+  Architecture: core-periphery (largest cyclic group: 3 files, 30.0%; next: 2)
+  Partition (core-periphery view): Shared 4, Core 3, Peripheral 1, Control 2
+
+  Cyclic groups (every member depends on every other, directly or indirectly):
+    1. 3 files (Core): Library/Catalog.swift, Library/Library.swift, Library/Shelf.swift
+       Removing one of these dependencies splits it:
+         Library/Catalog.swift → Library/Library.swift  `Library` line 8 (1 reference): no cycle left
+         ...
+```
+
 ## What is measured
 
 The method is Baldwin, MacCormack and Rusnak (2014), *"Hidden structure: Using network methods to
@@ -107,8 +124,15 @@ for the exact definitions and how each is computed.
 
 For each cyclic group, the tool removes each dependency between two members in turn and recomputes
 the cycles among them exactly. A dependency is listed when the largest group left is smaller than
-the group, most effective first (then the fewest references to remove).
+the group, most effective first (then the fewest references to remove):
 
+```
+    1. 3 files (Core): Library/Catalog.swift, Library/Library.swift, Library/Shelf.swift
+       Removing one of these dependencies splits it:
+         Library/Catalog.swift → Library/Library.swift  `Library` line 8 (1 reference): no cycle left
+         Library/Library.swift → Library/Shelf.swift  `Shelf` line 3 (1 reference): no cycle left
+         Library/Shelf.swift → Library/Catalog.swift  `Catalog` line 2 (1 reference): no cycle left
+```
 
 A dependency is all the references from one file to the other; removing them usually means moving
 a declaration to the other file or a lower one, introducing a protocol that the lower file owns, or
@@ -130,6 +154,14 @@ off works without a cycle between targets when dependencies cross its boundary i
   feature on top);
 - otherwise it is **blocked**, and the dependencies to remove in the cheaper direction are listed,
   or the files it needs that could move with it.
+
+```
+  Directories as targets (...):
+    Models/ (2 files): candidate lower target — depends on nothing else here; 5 dependencies (8 references) from other files would use it
+    Util/ (2 files): candidate lower target — depends on nothing else here; 1 dependency (2 references) from other files would use it
+    Features/Search/ (2 files): blocked — as a higher target, remove 1 dependency (2 references):
+        App.swift → Features/Search/SearchView.swift  `SearchView` line 4 (2 references)
+```
 
 The references that cross the boundary are the declarations that would have to become `public`.
 These are candidates: a dependency the tool cannot see can block one; the compiler settles it
@@ -192,7 +224,11 @@ failing exit status (invalid arguments exit with 64).
 
 ### Notes in Xcode and on pull requests
 `--format xcode` and `--format github` write a note (not a warning) at the most effective
-dependency to remove in each cyclic group, at the reference that creates it.
+dependency to remove in each cyclic group, at the reference that creates it:
+
+```
+/path/to/swift-modularity/Examples/Bookshelf/Models/Book.swift:3:17: note: removing the dependency on Models/Author.swift (`Author`, 1 reference) splits cyclic group 2 of 2 files in Bookshelf: no cycle left [swift-modularity]
+```
 
 
 Use `xcode` in a Run Script build phase (with `ENABLE_USER_SCRIPT_SANDBOXING = NO`, or the source
