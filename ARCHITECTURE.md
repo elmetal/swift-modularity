@@ -112,9 +112,6 @@ are outside the system.
    lookup. Arguments of `@_spi`, `@objc` and similar attributes are not references. The first
    reference to each other file is kept, with its line and column, and references are counted.
 
-The accuracy of this graph against the compiler's index is measured in
-[Evaluation/GraphAccuracy](Evaluation/GraphAccuracy).
-
 ## Layout
 
 ```

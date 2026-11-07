@@ -29,7 +29,7 @@ public struct BreakingDependency: Sendable, Equatable {
 ///
 /// The result is exact for the given graph. A graph built from syntax can miss dependencies (see
 /// `FileDependencyGraphBuilder`), and a missing dependency can keep a group together that this
-/// analysis splits; the evaluation in `Evaluation/GraphAccuracy` measures how often.
+/// analysis splits.
 public enum CycleBreaking {
     /// The dependencies that split `group`, the most effective first: the largest reduction, then
     /// the fewest references, then by file names.

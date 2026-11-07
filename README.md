@@ -193,9 +193,6 @@ Parameters, local variables and generic parameters shadow other names. Known lim
 - `files` treats everything it is given as one module; analyze each module separately (or use
   `package`) so that equal names in different modules do not create false dependencies.
 
-[Evaluation/GraphAccuracy](Evaluation/GraphAccuracy) compares this graph with the dependencies in a
-compiler index store, to measure how many dependencies it misses or invents on code you choose.
-
 ## Configuration
 
 `modularity.toml` in the current directory or a parent directory sets defaults; command-line

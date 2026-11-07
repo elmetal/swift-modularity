@@ -12,8 +12,7 @@
 ///
 /// Directories are the candidates because they are how a codebase already groups its files. The
 /// result is exact for the given graph; a graph built from syntax misses some dependencies, so a
-/// directory reported as a lower or upper target can still have a dependency the tool cannot see
-/// (the evaluation in `Evaluation/GraphAccuracy` measures how often).
+/// directory reported as a lower or upper target can still have a dependency the tool cannot see.
 public struct ExtractionCandidate: Sendable, Equatable {
     /// The directory, relative to the module (as in the node names), with a trailing `/`.
     public var directory: String
