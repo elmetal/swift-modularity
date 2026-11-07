@@ -105,20 +105,28 @@ the names it declares are collected, and file A depends on file B when A refers 
 
 - a type declared in B (struct, class, enum, actor, protocol, typealias), including nested types
   written as `Outer.Inner`, or as `Inner` inside `Outer` or one of its extensions;
-- a top-level function, variable or macro declared in B.
+- a top-level function, variable or macro declared in B;
+- a member declared in B (in the type or an extension of it), reached through implicit `self`
+  inside the type or its extensions, through `self.` / `Self.`, or through a type name
+  (`Config.timeout`). Members inherited from protocols and superclasses declared in the module are
+  found too; the type's own member hides an inherited one, and overloads are told apart by their
+  argument labels (allowing default arguments and trailing closures).
 
-An extension depends on the file declaring the extended type. Parameters, local variables, generic
-parameters and members of the enclosing types shadow top-level names. Known limits:
+An extension depends on the file declaring the extended type. `private` and `fileprivate`
+declarations are visible only in their own file, and DocC catalogs (`*.docc`) are skipped.
+Parameters, local variables and generic parameters shadow other names. Known limits:
 
-- **Members are not resolved.** `value.helper()`, where `helper` is added by an extension in another
-  file, does not create a dependency on that file (it needs type information). Dependencies are
-  therefore a subset of the real ones for code that relies on extension methods, so propagation cost
-  is a lower bound in that respect.
-- Members inherited from superclasses or protocols do not shadow top-level names of the same name.
-- Declarations inside `#if` count whatever the condition.
-- A name declared in several files (overloaded top-level functions) depends on all of them.
+- **Members reached through a value are not resolved.** `text.indented()`, where `indented` is
+  added by an extension in another file, or an implicit member expression such as `.default`, needs
+  the type of the value. These are most of the dependencies the tool misses, so propagation cost is
+  a lower bound.
+- Overloads with the same argument labels but different types depend on every file declaring one.
+- Declarations and references inside `#if` count whatever the condition.
 - `files` treats everything it is given as one module; analyze each module separately (or use
   `package`) so that equal names in different modules do not create false dependencies.
+
+[Evaluation/GraphAccuracy](Evaluation/GraphAccuracy) compares this graph with the dependencies in a
+compiler index store, to measure how many dependencies it misses or invents on code you choose.
 
 ## Configuration
 
