@@ -13,4 +13,18 @@ import Testing
         let files = try FileReader.findSwiftFiles(in: root.path)
         #expect(files.map { URL(fileURLWithPath: $0).lastPathComponent } == ["A.swift"])
     }
+
+    @Test func pathsAreSpelledUnderTheGivenDirectory() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("FileReaderTests-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let real = root.appendingPathComponent("real/Package/Sub")
+        try FileManager.default.createDirectory(at: real, withIntermediateDirectories: true)
+        try "struct A {}".write(to: real.appendingPathComponent("A.swift"), atomically: true, encoding: .utf8)
+        // A symbolic link in the path of the directory given, like /var → /private/var on macOS.
+        let link = root.appendingPathComponent("link")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: root.appendingPathComponent("real"))
+        let directory = link.appendingPathComponent("Package").path
+        let files = try FileReader.findSwiftFiles(in: directory)
+        #expect(files == [directory + "/Sub/A.swift"])
+    }
 }

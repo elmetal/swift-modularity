@@ -35,15 +35,8 @@ struct FilesCommand: AsyncParsableCommand {
 
     func run() async throws {
         let config = options.resolvedConfig()
-        let files = try FileReader.findSwiftFiles(in: paths, excluding: config.exclude.map(ExcludePattern.init))
-        let firstPath = URL(fileURLWithPath: paths[0]).standardizedFileURL
-        let moduleName = name ?? firstPath.lastPathComponent
-        // Name files relative to the directory given, or to the current directory.
-        var isDirectory: ObjCBool = false
-        FileManager.default.fileExists(atPath: firstPath.path, isDirectory: &isDirectory)
-        let base = paths.count == 1 && isDirectory.boolValue ? firstPath.path : FileManager.default.currentDirectoryPath
-        let module = await analyzeFiles(files, moduleName: moduleName, directory: paths.joined(separator: ", "),
-                                        relativeTo: base, thresholds: config.thresholds)
+        guard let module = try await Analyze.files(paths, name: name, currentDirectory: FileManager.default.currentDirectoryPath,
+                                                   config: config) else { return }
         try options.emit(ModularityReport(modules: [module]), config: config)
     }
 }

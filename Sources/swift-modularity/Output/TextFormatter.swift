@@ -197,19 +197,24 @@ public struct TextFormatter: Sendable {
 
     /// "A.swift → B.swift  `Foo` line 12 (3 references): largest group left 9 files (9 + 2)"
     static func describe(_ breaking: ModuleReport.BreakingDependencyReport, groupSize: Int, noun: String) -> String {
-        let dependency = breaking.dependency
+        describe(breaking.dependency) + ": " + remaining(breaking.remainingGroups, noun: noun)
+    }
+
+    /// "A.swift → B.swift  `Foo` line 12 (3 references)"
+    static func describe(_ dependency: ModuleReport.Dependency) -> String {
         var text = "\(dependency.from) → \(dependency.to)"
         if let symbol = dependency.symbol, let line = dependency.line {
             text += "  `\(symbol)` line \(line)"
         }
-        text += " (\(dependency.references) reference\(dependency.references == 1 ? "" : "s")): "
-        if let largest = breaking.remainingGroups.first {
-            text += "largest group left \(largest) \(noun)"
-            if breaking.remainingGroups.count > 1 {
-                text += " (" + breaking.remainingGroups.map(String.init).joined(separator: " + ") + ")"
-            }
-        } else {
-            text += "no cycle left"
+        return text + " (\(dependency.references) reference\(dependency.references == 1 ? "" : "s"))"
+    }
+
+    /// "largest group left 9 files (9 + 2)", or "no cycle left"
+    static func remaining(_ groups: [Int], noun: String) -> String {
+        guard let largest = groups.first else { return "no cycle left" }
+        var text = "largest group left \(largest) \(noun)"
+        if groups.count > 1 {
+            text += " (" + groups.map(String.init).joined(separator: " + ") + ")"
         }
         return text
     }

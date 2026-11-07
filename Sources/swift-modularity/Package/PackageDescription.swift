@@ -60,6 +60,10 @@ public struct PackageDescription: Sendable, Codable, Equatable {
 public enum PackageLoader {
     public struct LoadError: Error, CustomStringConvertible {
         public let description: String
+
+        public init(description: String) {
+            self.description = description
+        }
     }
 
     /// Runs `swift package dump-package` in `packageDirectory` and parses its output.
