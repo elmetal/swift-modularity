@@ -63,3 +63,26 @@ they describe the repositories evaluated.
   evaluation; improvements found here are made afterwards and measured
   separately.
 - All modules that meet the conditions above are reported, whatever their results.
+
+## Addendum: dependencies that split a cyclic group
+
+Written before measuring this finding (the `feat/breaking-dependencies` branch), on the same
+corpus and index stores, with the graph of `fix/graph-accuracy`.
+
+A finding is a dependency u → v between two members of a cyclic group G of the tool's graph whose
+removal makes the largest cyclic group left among G's members smaller than G
+(`CycleBreaking`). The question: would removing it split the cycle in the compiler's graph too?
+
+For each finding, in the index graph T_all:
+
+- **confirmed**: u → v is an edge of T_all, u and v are in the same cyclic group G_T, and removing
+  u → v makes the largest group left among G_T's members smaller than G_T;
+- **same effect**: confirmed, and the sizes of the groups left are the same as the tool says;
+- **no split**: u and v are in the same group of T_all, but removing u → v does not split it
+  (another dependency the tool misses closes the cycle);
+- **not in an index cycle**: u → v is not an edge of T_all, or u and v are not in the same group.
+
+Measures, per module and pooled: the share of findings confirmed, with the same effect, and in
+each failure class, for all findings and for the **top findings** (those with the largest
+reduction in their group, which the Xcode / GitHub notes show). Recall: of the dependencies that
+split a group of T_all, the share the tool also reports.

@@ -3,12 +3,12 @@ import Foundation
 import swift_modularity
 
 enum OutputFormat: String, ExpressibleByArgument, CaseIterable {
-    case text, json
+    case text, json, xcode, github
 }
 
 /// Options shared by `files` and `package`.
 struct CommonOptions: ParsableArguments {
-    @Option(name: [.short, .long], help: "Output format: text or json.")
+    @Option(name: [.short, .long], help: "Output format: text, json, or xcode / github (a note at the dependency that best splits each cyclic group).")
     var format: OutputFormat = .text
 
     @Option(name: [.short, .long], help: "Write the results to this file instead of standard output.")
@@ -74,12 +74,20 @@ struct CommonOptions: ParsableArguments {
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
             text = String(decoding: try encoder.encode(report), as: UTF8.self) + "\n"
+        case .xcode:
+            text = Self.terminated(DiagnosticFormatter.format(report, style: .xcode))
+        case .github:
+            text = Self.terminated(DiagnosticFormatter.format(report, style: .github, relativeTo: FileManager.default.currentDirectoryPath))
         }
         if let output {
             try text.write(toFile: output, atomically: true, encoding: .utf8)
         } else {
             FileHandle.standardOutput.write(Data(text.utf8))
         }
+    }
+
+    private static func terminated(_ text: String) -> String {
+        text.isEmpty ? "" : text + "\n"
     }
 }
 

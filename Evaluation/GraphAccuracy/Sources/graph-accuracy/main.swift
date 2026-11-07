@@ -116,8 +116,11 @@ struct GraphAccuracy: ParsableCommand {
             func graph(_ edges: Set<Pair>) -> DependencyGraph {
                 DependencyGraph(nodes: nodes, edges: edges.map { DependencyGraph.Edge(from: index[$0.from]!, to: index[$0.to]!) })
             }
-            let toolAnalysis = ModularityAnalysis(graph: graph(toolEdges))
-            let truthAnalysis = ModularityAnalysis(graph: graph(truthAll))
+            let toolGraph2 = graph(toolEdges)
+            let truthGraph = graph(truthAll)
+            let toolAnalysis = ModularityAnalysis(graph: toolGraph2)
+            let truthAnalysis = ModularityAnalysis(graph: truthGraph)
+            let breaking = BreakingEvaluation(tool: toolAnalysis, truth: truthAnalysis, names: nodes.map(\.name))
 
             results.append(ModuleResult(
                 module: module,
@@ -132,6 +135,7 @@ struct GraphAccuracy: ParsableCommand {
                 coMembership: PairAgreement(tool: toolAnalysis, truth: truthAnalysis),
                 coreJaccard: coreJaccard(toolAnalysis, truthAnalysis),
                 groupAgreement: Double(zip(toolAnalysis.groups, truthAnalysis.groups).filter { $0 == $1 }.count) / Double(sortedFiles.count),
+                breaking: breaking,
                 falsePositives: toolEdges.subtracting(truthAll).sorted().map {
                     ErrorEdge(from: relative($0.from, to: base), to: relative($0.to, to: base), reference: tool[$0]!)
                 },
@@ -239,6 +243,7 @@ struct ModuleResult: Codable {
     /// Jaccard index of the largest cyclic groups (nil when neither has one).
     var coreJaccard: Double?
     var groupAgreement: Double
+    var breaking: BreakingEvaluation
     var falsePositives: [ErrorEdge]
     var falseNegativesInScope: [ErrorEdge]
     var falseNegativesOutOfScope: [ErrorEdge]
@@ -271,11 +276,81 @@ struct CorpusResult: Codable {
         let tp = modules.map(\.truePositives).reduce(0, +)
         let tpScope = modules.map(\.truePositivesInScope).reduce(0, +)
         lines.append("pooled: precision \(pct(tp, tool)), recall (all) \(pct(tp, truth)), recall (scope) \(pct(tpScope, scope)); \(tool) tool edges, \(truth) index edges")
+        var all = BreakingCounts(), top = BreakingCounts(); var indexBreaking = 0, indexFound = 0
+        for m in modules {
+            for (keyPath, counts) in [(\BreakingEvaluation.all, m.breaking.all), (\BreakingEvaluation.top, m.breaking.top)] {
+                var target = keyPath == \BreakingEvaluation.all ? all : top
+                target.findings += counts.findings; target.confirmed += counts.confirmed; target.sameEffect += counts.sameEffect
+                target.noSplit += counts.noSplit; target.notInIndexCycle += counts.notInIndexCycle
+                if keyPath == \BreakingEvaluation.all { all = target } else { top = target }
+            }
+            indexBreaking += m.breaking.indexBreaking; indexFound += m.breaking.indexBreakingFound
+        }
+        lines.append("splitting dependencies: \(all.findings) findings, confirmed \(pct(all.confirmed, all.findings)), same effect \(pct(all.sameEffect, all.findings)), no split \(all.noSplit), not in an index cycle \(all.notInIndexCycle); top \(top.findings): confirmed \(pct(top.confirmed, top.findings)), same effect \(pct(top.sameEffect, top.findings)); recall \(pct(indexFound, indexBreaking)) of \(indexBreaking)")
         if !skipped.isEmpty {
             lines.append("skipped: " + skipped.sorted { $0.key < $1.key }.map { "\($0.key) (\($0.value))" }.joined(separator: ", "))
         }
         if unindexedFiles > 0 { lines.append("files not in the index: \(unindexedFiles)") }
         return lines.joined(separator: "\n")
+    }
+}
+
+// MARK: - Dependencies that split a cyclic group (PROTOCOL.md, addendum)
+
+struct BreakingCounts: Codable {
+    var findings = 0
+    var confirmed = 0
+    var sameEffect = 0
+    var noSplit = 0
+    var notInIndexCycle = 0
+}
+
+struct BreakingEvaluation: Codable {
+    var all = BreakingCounts()
+    var top = BreakingCounts()
+    /// Dependencies that split a group of the index graph, and how many the tool reports.
+    var indexBreaking = 0
+    var indexBreakingFound = 0
+    /// Findings that are not confirmed, for error analysis.
+    var unconfirmed: [String] = []
+
+    init(tool: ModularityAnalysis, truth: ModularityAnalysis, names: [String]) {
+        var toolFindings: Set<[Int]> = []
+        for group in tool.cyclicGroups {
+            let findings = CycleBreaking.breakingDependencies(in: tool.graph, group: group)
+            let best = findings.first?.reduction
+            for finding in findings {
+                let from = finding.edge.from, to = finding.edge.to
+                toolFindings.insert([from, to])
+                let outcome: (confirmed: Bool, same: Bool, noSplit: Bool)
+                if truth.graph.edge(from: from, to: to) != nil,
+                   let g = truth.cyclicGroupIndex(of: from), g == truth.cyclicGroupIndex(of: to) {
+                    let truthGroup = truth.cyclicGroups[g]
+                    let remaining = CycleBreaking.remainingGroupSizes(in: truth.graph, group: truthGroup, removing: from, to)
+                    let splits = (remaining.first ?? 0) < truthGroup.count
+                    outcome = (splits, splits && remaining == finding.remainingGroupSizes, !splits)
+                    if !splits { unconfirmed.append("no split: \(names[from]) → \(names[to]) (index group \(truthGroup.count), tool group \(group.count))") }
+                } else {
+                    outcome = (false, false, false)
+                    unconfirmed.append("not in an index cycle: \(names[from]) → \(names[to])")
+                }
+                for isTop in [false, true] where !isTop || finding.reduction == best {
+                    var counts = isTop ? top : all
+                    counts.findings += 1
+                    if outcome.confirmed { counts.confirmed += 1 }
+                    if outcome.same { counts.sameEffect += 1 }
+                    if outcome.noSplit { counts.noSplit += 1 }
+                    if !outcome.confirmed && !outcome.noSplit { counts.notInIndexCycle += 1 }
+                    if isTop { top = counts } else { all = counts }
+                }
+            }
+        }
+        for group in truth.cyclicGroups {
+            for finding in CycleBreaking.breakingDependencies(in: truth.graph, group: group) {
+                indexBreaking += 1
+                if toolFindings.contains([finding.edge.from, finding.edge.to]) { indexBreakingFound += 1 }
+            }
+        }
     }
 }
 

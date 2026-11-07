@@ -52,13 +52,16 @@ propose changes only to reach zero cycles.
 
 For each cyclic group, starting with the Core and the largest groups:
 
-1. Find the few dependencies whose removal breaks the cycle: usually a low-level file that refers
-   back to a high-level one (a model that knows a view, a utility that knows a feature). Check the
-   referenced line.
+1. Start from the dependencies the tool lists under "Removing one of these dependencies splits
+   it" (most effective first): usually a low-level file that refers back to a high-level one (a
+   model that knows a view, a utility that knows a feature). Read the referenced line and the other
+   references between the two files. A group listed as split by no single dependency needs a
+   larger change (splitting a file or a type).
 2. Propose a concrete change for each: move the type to the file or module it belongs with, extract
    a protocol into the lower file and let the higher one conform, inject a closure instead of
    referring to the caller, or split a file that mixes layers.
-3. Say what the change does to the structure (which files leave the group, whether the module could
+3. After a change, rerun the tool to confirm the group split: a dependency the tool cannot see
+   can keep the cycle. Say what the change does to the structure (which files leave the group, whether the module could
    then be split into targets) and its risk (public API changes, behavior to preserve, tests to run).
 
 Also point out Shared files with a high VFO (foundation code depending on much) and targets whose
