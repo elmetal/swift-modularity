@@ -1,9 +1,9 @@
 ---
-name: check-modularity
+name: modularity-review
 description: Measure the dependency structure of Swift code with swift-modularity (propagation cost, dependency cycles between files, core-periphery architecture) and plan how to untangle it. Use when asked about modularity, coupling, dependency cycles, architecture, or splitting a Swift module or package.
 ---
 
-# Check Swift modularity
+# Review Swift modularity
 
 Use `swift-modularity-cli` to measure how changes spread through a Swift codebase, then turn the
 results into a plan. Run the CLI yourself; don't ask the user to run it.
