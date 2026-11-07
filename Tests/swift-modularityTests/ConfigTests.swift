@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import swift_modularity
 
@@ -29,5 +30,19 @@ import Testing
         #expect(merged.limit == 0)
 
         #expect(throws: ModularityConfig.ParseError.self) { try ModularityConfig.parse("limit = many") }
+    }
+
+    @Test func findStopsAtTheRoot() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("modularity-\(UUID().uuidString)/a/b")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory.deletingLastPathComponent().deletingLastPathComponent()) }
+
+        #expect(ModularityConfig.find(from: "/") == nil)
+        #expect(ModularityConfig.find(from: directory.path) == nil)
+
+        let file = directory.deletingLastPathComponent().appendingPathComponent(ModularityConfig.fileName)
+        try "".write(to: file, atomically: true, encoding: .utf8)
+        #expect(ModularityConfig.find(from: directory.path) == file.standardizedFileURL.path)
     }
 }
