@@ -46,22 +46,8 @@ swift-modularity-cli package --matrix --limit 0
 swift-modularity-cli package --format json
 ```
 
-Example, on [`Examples/Bookshelf`](Examples/Bookshelf), a made-up module
-(`swift-modularity-cli files Examples/Bookshelf`):
-
-```
-Bookshelf (files) — Examples/Bookshelf
-  10 files, 16 dependencies
-  Propagation cost: 50.0%
-  Architecture: core-periphery (largest cyclic group: 3 files, 30.0%; next: 2)
-  Partition (core-periphery view): Shared 4, Core 3, Peripheral 1, Control 2
-
-  Cyclic groups (every member depends on every other, directly or indirectly):
-    1. 3 files (Core): Library/Catalog.swift, Library/Library.swift, Library/Shelf.swift
-       Removing one of these dependencies splits it:
-         Library/Catalog.swift → Library/Library.swift  `Library` line 8 (1 reference): no cycle left
-         ...
-```
+Each module's report gives its size, propagation cost, architecture and partition, then its
+cyclic groups and its directories as targets; the excerpts below show how to read them.
 
 ## What is measured
 
@@ -223,7 +209,7 @@ failing exit status (invalid arguments exit with 64).
 dependency to remove in each cyclic group, at the reference that creates it:
 
 ```
-/path/to/swift-modularity/Examples/Bookshelf/Models/Book.swift:3:17: note: removing the dependency on Models/Author.swift (`Author`, 1 reference) splits cyclic group 2 of 2 files in Bookshelf: no cycle left [swift-modularity]
+/path/to/MyApp/Models/Book.swift:3:17: note: removing the dependency on Models/Author.swift (`Author`, 1 reference) splits cyclic group 2 of 2 files in MyApp: no cycle left [swift-modularity]
 ```
 
 
