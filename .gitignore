@@ -19,3 +19,7 @@ Package.pins
 
 .build/
 
+# Evaluation outputs stay local: they describe the repositories evaluated.
+Evaluation/GraphAccuracy/results/
+Evaluation/GraphAccuracy/RESULTS.md
+Evaluation/GraphAccuracy/run-corpus.sh
