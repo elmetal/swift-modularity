@@ -55,16 +55,24 @@ public struct TextFormatter: Sendable {
             lines.append("")
             lines.append("  Cyclic groups (every member depends on every other, directly or indirectly):")
             for (index, group) in module.cyclicGroups.enumerated() {
-                lines.append("    \(index + 1). \(group.size) \(module.elementNoun)\(group.isCore ? " (Core)" : "")")
-                for dependency in group.dependencies {
-                    var line = "       \(dependency.from) → \(dependency.to)"
-                    if let symbol = dependency.symbol, let lineNumber = dependency.line {
-                        line += "  `\(symbol)` line \(lineNumber)"
-                        if dependency.references > 1 {
-                            line += " (+\(dependency.references - 1) more)"
-                        }
-                    }
-                    lines.append(line)
+                let shownMembers = limit > 0 ? Array(group.members.prefix(limit)) : group.members
+                var header = "    \(index + 1). \(group.size) \(module.elementNoun)\(group.isCore ? " (Core)" : ""): "
+                header += shownMembers.joined(separator: ", ")
+                if shownMembers.count < group.members.count {
+                    header += " … and \(group.members.count - shownMembers.count) more"
+                }
+                lines.append(header)
+                if group.breakingDependencies.isEmpty {
+                    lines.append("       No single dependency splits it (\(group.dependencies.count) dependencies inside).")
+                    continue
+                }
+                lines.append("       Removing one of these dependencies splits it:")
+                let shown = limit > 0 ? Array(group.breakingDependencies.prefix(limit)) : group.breakingDependencies
+                for breaking in shown {
+                    lines.append("         " + Self.describe(breaking, groupSize: group.size, noun: module.elementNoun))
+                }
+                if shown.count < group.breakingDependencies.count {
+                    lines.append("         … and \(group.breakingDependencies.count - shown.count) more (--limit 0 lists all)")
                 }
             }
         }
@@ -132,6 +140,25 @@ public struct TextFormatter: Sendable {
             lines.append("    \(number) \(group) |\(cells)| \(name)")
         }
         return lines
+    }
+
+    /// "A.swift → B.swift  `Foo` line 12 (3 references): largest group left 9 files (9 + 2)"
+    static func describe(_ breaking: ModuleReport.BreakingDependencyReport, groupSize: Int, noun: String) -> String {
+        let dependency = breaking.dependency
+        var text = "\(dependency.from) → \(dependency.to)"
+        if let symbol = dependency.symbol, let line = dependency.line {
+            text += "  `\(symbol)` line \(line)"
+        }
+        text += " (\(dependency.references) reference\(dependency.references == 1 ? "" : "s")): "
+        if let largest = breaking.remainingGroups.first {
+            text += "largest group left \(largest) \(noun)"
+            if breaking.remainingGroups.count > 1 {
+                text += " (" + breaking.remainingGroups.map(String.init).joined(separator: " + ") + ")"
+            }
+        } else {
+            text += "no cycle left"
+        }
+        return text
     }
 
     static func title(of group: ComponentGroup, view: PartitionView) -> String {

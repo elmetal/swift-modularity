@@ -61,6 +61,16 @@ Control, each sorted by VFI descending, then VFO ascending (then name, for a sta
 
 Tests check V against Figure 4 of the paper and against Warshall's algorithm on random graphs.
 
+## Dependencies that split a cyclic group
+
+`CycleBreaking` takes each cyclic group's own subgraph and, for each dependency between two
+members, recomputes the strongly connected components without it (Tarjan, O(V + E) per
+dependency, so O(E · (V + E)) per group). A dependency is reported when the largest component
+left is smaller than the group; they are ranked by the reduction, then by the number of
+references, then by name. Pairs or sets of dependencies are not searched: the smallest set that
+removes every cycle (a minimum feedback arc set) is NP-hard, and one dependency at a time is what
+one change does.
+
 ## Building the graphs
 
 **Targets** (`PackageDescription`, `PackageLoader`): `swift package dump-package`, or the JSON that
@@ -98,11 +108,11 @@ The accuracy of this graph against the compiler's index is measured in
 ```
 Sources/swift-modularity/
   Graph/      DependencyGraph, StronglyConnectedComponents, VisibilityMatrix (+ BitSet)
-  Analysis/   ModularityAnalysis (classification, partition, DSM order)
+  Analysis/   ModularityAnalysis (classification, partition, DSM order), CycleBreaking
   Syntax/     FileDependencyGraphBuilder (DeclarationCollector, ReferenceCollector)
   Package/    PackageDescription, PackageLoader
   Config/     ModularityConfig (modularity.toml)
-  Output/     ModularityReport (JSON model), TextFormatter
+  Output/     ModularityReport (JSON model), TextFormatter, DiagnosticFormatter (notes)
   Utils/      FileReader, ExcludePattern (shared with swift-similarity), concurrentMap
 Sources/swift-modularity-cli/   `files` and `package` commands
 Plugins/ModularityPlugin/       `swift package modularity`

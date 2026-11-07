@@ -86,14 +86,13 @@ for the exact definitions and how each is computed.
 
 ### Reading the results
 
-- Each **cyclic group** lists the dependencies between its members, with the first reference that
-  creates each one. Swift allows any file of a module to use any other, so cycles between files are
+- Each **cyclic group** lists its members and the dependencies whose removal splits it (see
+  [Dependencies that split a cycle](#dependencies-that-split-a-cycle)). Swift allows any file of a
+  module to use any other, so cycles between files are
   legal and common, and a small one (a type and its extension, a view and its model) is usually
   harmless. A large group matters because its files may have to change or be understood together,
   and it blocks splitting the module. A reported group can be smaller
-  than the real one when the tool misses a dependency:
-  missing dependencies can close a cycle another way, so removing the listed references does not
-  always break it.
+  than the real one when the tool misses a dependency.
 - **Propagation cost** is a system-level number: track it over time, or compare targets of similar
   size. It is a lower bound at file level, since the tool misses some dependencies. In
   MacCormack et al. (2006) it differs widely between systems with the same function. MacCormack and
@@ -103,6 +102,22 @@ for the exact definitions and how each is computed.
 - **Control** elements are top-level code (commands, view controllers, composition roots);
   **Shared** elements are the foundation everything relies on. A Shared element that depends on a
   lot, or a Core that keeps growing, is worth a look.
+
+## Dependencies that split a cycle
+
+For each cyclic group, the tool removes each dependency between two members in turn and recomputes
+the cycles among them exactly. A dependency is listed when the largest group left is smaller than
+the group, most effective first (then the fewest references to remove).
+
+
+A dependency is all the references from one file to the other; removing them usually means moving
+a declaration to the other file or a lower one, introducing a protocol that the lower file owns, or
+passing a closure instead of naming the caller. A group with no such dependency is listed as one
+that no single dependency splits.
+
+A dependency the tool cannot see (a member reached through a value) can close the cycle another
+way, which is likelier in modules whose types are extended across many files: rerun the analysis
+after the change to confirm.
 
 ## How file dependencies are found
 
@@ -152,11 +167,21 @@ limit = 10                      # --limit (elements listed per group in text out
 
 ## Reports, not verdicts
 
-swift-modularity reports measurements; it does not flag or fail anything. No threshold on cycles
+swift-modularity reports measurements and the dependencies that split cycles; it does not fail
+anything. No threshold on cycles
 or propagation cost has been shown to improve code quality: the studies relate the Core and
 coupling to maintenance costs, they do not define a level that is acceptable. A gate such as "no
-cycles" would mostly push toward merging files to hide them. So there are no warnings in Xcode or
-on pull requests and no failing exit status (invalid arguments exit with 64).
+cycles" would mostly push toward merging files to hide them. So there are no warnings and no
+failing exit status (invalid arguments exit with 64).
+
+### Notes in Xcode and on pull requests
+`--format xcode` and `--format github` write a note (not a warning) at the most effective
+dependency to remove in each cyclic group, at the reference that creates it.
+
+
+Use `xcode` in a Run Script build phase (with `ENABLE_USER_SCRIPT_SANDBOXING = NO`, or the source
+directories as input files) and `github` in a GitHub Actions step
+(`swift package modularity --format github`).
 
 To follow the measures over time, keep the JSON report of each release or merge:
 

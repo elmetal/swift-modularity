@@ -47,6 +47,17 @@ public struct ModuleReport: Sendable, Codable, Equatable {
         public var members: [String]
         /// The dependencies between members of the group.
         public var dependencies: [Dependency]
+        /// The dependencies whose removal splits the group, the most effective first.
+        public var breakingDependencies: [BreakingDependencyReport]
+    }
+
+    /// A dependency whose removal splits its cyclic group (see `CycleBreaking`).
+    public struct BreakingDependencyReport: Sendable, Codable, Equatable {
+        public var dependency: Dependency
+        /// The sizes of the cyclic groups left without the dependency, largest first.
+        public var remainingGroups: [Int]
+        /// How many files leave the largest group.
+        public var reduction: Int
     }
 
     public var name: String
@@ -95,9 +106,12 @@ public struct ModuleReport: Sendable, Codable, Equatable {
             let edges = members.flatMap { member in
                 graph.successors[member].filter(memberSet.contains).compactMap { graph.edge(from: member, to: $0) }
             }
+            let breaking = CycleBreaking.breakingDependencies(in: graph, group: members).map {
+                BreakingDependencyReport(dependency: dependency($0.edge), remainingGroups: $0.remainingGroupSizes, reduction: $0.reduction)
+            }
             return CyclicGroup(size: members.count, isCore: hasCore && index == 0,
                                members: members.map { graph.nodes[$0].name },
-                               dependencies: edges.map(dependency))
+                               dependencies: edges.map(dependency), breakingDependencies: breaking)
         }
         self.elements = analysis.dsmOrder.map { index in
             Element(name: graph.nodes[index].name, path: graph.nodes[index].path,
