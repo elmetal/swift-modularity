@@ -36,15 +36,17 @@ public struct ModularityConfig: Sendable, Equatable {
 
     /// The nearest `modularity.toml` in `directory` or one of its parents.
     public static func find(from directory: String) -> String? {
-        var url = URL(fileURLWithPath: directory).standardizedFileURL
+        // Walk the path as a string: on macOS 15, `URL.deletingLastPathComponent()` turns "/" into
+        // "/..", so the parent of the root never equals the root and the loop would not end.
+        var path = URL(fileURLWithPath: directory).standardizedFileURL.path
         while true {
-            let candidate = url.appendingPathComponent(fileName).path
+            let candidate = (path as NSString).appendingPathComponent(fileName)
             if FileManager.default.fileExists(atPath: candidate) {
                 return candidate
             }
-            let parent = url.deletingLastPathComponent()
-            if parent.path == url.path { return nil }
-            url = parent
+            let parent = (path as NSString).deletingLastPathComponent
+            if parent.isEmpty || parent == path { return nil }
+            path = parent
         }
     }
 
