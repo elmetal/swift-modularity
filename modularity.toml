@@ -1,0 +1,2 @@
+# Settings for running swift-modularity on this repository (and its CI).
+fail_on_cycles = true
