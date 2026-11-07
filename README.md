@@ -44,6 +44,11 @@ swift-modularity-cli MyApp/Sources --exclude '**/Generated/**'   # `files` is th
 # The reordered DSM, all elements, JSON
 swift-modularity-cli package --matrix --limit 0
 swift-modularity-cli package --format json
+
+# What changed: this branch and its uncommitted changes against the default branch, two revisions
+swift-modularity-cli diff
+swift-modularity-cli diff main...feature
+swift-modularity-cli diff v1.0..v2.0 -- MyApp/Sources   # after --: directories, as `files` takes them
 ```
 
 Each module's report gives its size, propagation cost, architecture and partition, then its
@@ -152,6 +157,47 @@ The references that cross the boundary are the declarations that would have to b
 These are candidates: a dependency the tool cannot see can block one; the compiler settles it
 when the directory is moved.
 
+## Changes between revisions
+
+`diff` analyzes two revisions of a git repository and reports what changed: elements and
+dependencies added and removed, propagation cost, architecture, and the cyclic groups that are
+new, grew, shrank or are no longer cycles. The revisions are written as in `git diff`:
+
+| Argument | Compares |
+| --- | --- |
+| (none) | the merge base of the default branch (`origin/HEAD`, else `main` or `master`) and `HEAD`, with the working tree |
+| `A...B` | the merge base of A and B, with B (an empty side is `HEAD`) |
+| `A..B` | A with B |
+| `A` | A with the working tree |
+
+Both sides are analyzed on the spot, with the same version of the tool and the same
+`modularity.toml`, so no report has to be kept between runs, and a change to the tool never makes
+the two sides incomparable. A revision is checked out into a temporary git worktree; the working
+tree is not touched. Without paths, the package in `--package-path` is analyzed as `package` does;
+after `--`, the paths are analyzed as one module, as `files` does. `diff` runs from the
+command-line tool, not from the command plugin.
+
+```
+App (files) — App
+  Files: 3 → 4 (+1)
+    added: D.swift
+  Dependencies: 2 → 4 (+2, −0)
+  Propagation cost: 66.7% → 81.2% (+14.6 points)
+  Architecture: hierarchical → core-periphery
+  Largest cyclic group: 0 → 3 files
+
+  Cyclic groups that changed:
+    New: group 1, 3 files: A.swift, B.swift, C.swift
+      New dependencies inside:
+        B.swift → C.swift  `C` line 2 (1 reference): removing it splits the group, no cycle left
+```
+
+Groups are matched by their members: a group continues the earlier group it shares the most
+members with (at least two). Its new dependencies are the dependencies between its members that
+the earlier revision did not have, the ones whose removal splits the group first; those are where
+a change of the branch closed a cycle. Files are matched by path, so a renamed file is removed
+and added.
+
 ## How file dependencies are found
 
 Nothing is compiled: each file is parsed with [SwiftSyntax](https://github.com/swiftlang/swift-syntax),
@@ -217,11 +263,18 @@ Use `xcode` in a Run Script build phase (with `ENABLE_USER_SCRIPT_SANDBOXING = N
 directories as input files) and `github` in a GitHub Actions step
 (`swift package modularity --format github`).
 
-To follow the measures over time, keep the JSON report of each release or merge:
+With `diff`, the notes are only at the new dependencies that close or grow a cyclic group, which
+suits a pull request: the cycles that were already there are not repeated on every change.
 
-```bash
-swift-modularity-cli package --format json --output modularity.json
+```yaml
+- uses: actions/checkout@v4
+  with:
+    fetch-depth: 0   # the merge base needs the history
+- run: swift-modularity-cli diff origin/${{ github.base_ref }}...HEAD --format github
 ```
+
+To follow the measures over time, compare any two revisions, such as two release tags
+(`diff v1.0..v2.0`); `--format json` gives the same comparison for other tools.
 
 ### AI assistants
 The text output gives cycles with `file:line` references and the role of every file, which an AI

@@ -29,7 +29,15 @@ swift-modularity-cli files MyApp --exclude '**/Generated/**'
 # The reordered DSM for a small module; machine-readable output
 swift-modularity-cli files Sources/Core --matrix
 swift-modularity-cli package --format json
+
+# What a branch changed (default: the merge base with the default branch → the working tree)
+swift-modularity-cli diff
+swift-modularity-cli diff main...feature -- MyApp
 ```
+
+To review a branch or a pull request, start with `diff`: it lists the cyclic groups that are new
+or grew, and the new dependencies inside them that close the cycle. Focus the review on those
+rather than on cycles that were already there.
 
 ## Reading the results
 

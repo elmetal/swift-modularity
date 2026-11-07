@@ -41,10 +41,10 @@ public class FileReader {
                 enumerator.skipDescendants()
                 continue
             }
+            // The enumerator's depth gives the path relative to `directory`, even when the URLs it
+            // returns resolve symbolic links in the root (such as /var → /private/var).
+            let relative = Array(fileURL.pathComponents.suffix(enumerator.level))
             if !exclude.isEmpty {
-                // The enumerator's depth gives the path relative to `directory`, even when the
-                // URLs it returns resolve symbolic links in the root (such as /var → /private/var).
-                let relative = Array(fileURL.pathComponents.suffix(enumerator.level))
                 if exclude.anyMatches(pathComponents: relative) {
                     if resourceValues.isDirectory == true {
                         enumerator.skipDescendants()
@@ -53,7 +53,8 @@ public class FileReader {
                 }
             }
             if resourceValues.isRegularFile == true && fileURL.pathExtension == "swift" {
-                swiftFiles.append(fileURL.path)
+                // Spelled under `directory` as given, so that paths can be named relative to it.
+                swiftFiles.append(relative.reduce(url) { $0.appendingPathComponent($1) }.path)
             }
         }
 

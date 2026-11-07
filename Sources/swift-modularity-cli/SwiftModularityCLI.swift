@@ -12,7 +12,7 @@ struct SwiftModularityCLI: AsyncParsableCommand {
         (2014), "Hidden structure: Using network methods to map system architecture".
         """,
         version: "0.0.1",
-        subcommands: [FilesCommand.self, PackageCommand.self],
+        subcommands: [FilesCommand.self, PackageCommand.self, DiffCommand.self],
         defaultSubcommand: FilesCommand.self
     )
 }

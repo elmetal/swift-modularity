@@ -71,6 +71,18 @@ references, then by name. Pairs or sets of dependencies are not searched: the sm
 removes every cycle (a minimum feedback arc set) is NP-hard, and one dependency at a time is what
 one change does.
 
+## Changes between revisions
+
+`diff` resolves the two sides with git (`merge-base` for `A...B` and the default range), checks
+out each revision with `git worktree add --detach` into a temporary directory, runs the same
+analysis as `package` or `files` with the directory standing for the current one, and rewrites
+the paths of the report to the working tree's. `ModularityDiff` then compares the two reports:
+modules by level and name, elements by name, dependencies by their two ends. Each cyclic group of
+the newer side continues the older group with which it shares the most members, at least two
+(two members that still depend on each other); a newer group without one is new, an older group
+that no newer group continues is resolved. The new dependencies of a group are its internal
+dependencies absent from the older graph, ordered as its `breakingDependencies`.
+
 ## Directories as targets
 
 `Extraction` takes every directory prefix of the file names (relative to the module) with at least
@@ -121,8 +133,9 @@ Sources/swift-modularity/
   Syntax/     FileDependencyGraphBuilder (DeclarationCollector, ReferenceCollector)
   Package/    PackageDescription, PackageLoader
   Config/     ModularityConfig (modularity.toml)
-  Output/     ModularityReport (JSON model), TextFormatter, DiagnosticFormatter (notes)
+  Diff/       RevisionRange, Git (merge base, temporary worktrees), ModularityDiff
+  Output/     ModularityReport (JSON model), TextFormatter, DiagnosticFormatter (notes), DiffFormatter
   Utils/      FileReader, ExcludePattern, concurrentMap
-Sources/swift-modularity-cli/   `files` and `package` commands
+Sources/swift-modularity-cli/   `files`, `package` and `diff` commands
 Plugins/ModularityPlugin/       `swift package modularity`
 ```
