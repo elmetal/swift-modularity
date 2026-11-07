@@ -30,10 +30,9 @@ jobs:
       - name: Test
         run: swift test --skip-build
 
-      # Analyze this package with its own command plugin. modularity.toml fails the job on
-      # dependency cycles; the dependencies inside a cycle are annotated on the pull request.
-      - name: Check modularity
-        run: swift package modularity --format github
+      # Run the command plugin on this package: a smoke test, and the report in the job log.
+      - name: Run the command plugin
+        run: swift package modularity
 
   test-macos:
     name: swift test (macOS)
@@ -61,4 +60,4 @@ jobs:
 
       # Run the command plugin on macOS, where plugins run in the sandbox.
       - name: Run the command plugin
-        run: swift package modularity --format xcode
+        run: swift package modularity

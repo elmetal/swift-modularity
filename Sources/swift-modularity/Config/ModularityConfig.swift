@@ -11,8 +11,6 @@ import Foundation
 /// ```toml
 /// exclude = ["**/Generated/**"]   # added to --exclude
 /// include_tests = false           # --include-tests (package)
-/// fail_on_cycles = false          # --fail-on-cycles
-/// max_propagation_cost = 0.3      # --max-propagation-cost
 /// size_threshold = 0.05           # --size-threshold
 /// sensitivity_threshold = 0.01    # --sensitivity-threshold
 /// dominance_threshold = 0.5       # --dominance-threshold
@@ -23,8 +21,6 @@ public struct ModularityConfig: Sendable, Equatable {
 
     public var exclude: [String] = []
     public var includeTests: Bool?
-    public var failOnCycles: Bool?
-    public var maxPropagationCost: Double?
     public var sizeThreshold: Double?
     public var sensitivityThreshold: Double?
     public var dominanceThreshold: Double?
@@ -80,8 +76,6 @@ public struct ModularityConfig: Sendable, Equatable {
             switch key {
             case "exclude": config.exclude = try parseStrings(value, context)
             case "include_tests": config.includeTests = try parseBool(value, context)
-            case "fail_on_cycles": config.failOnCycles = try parseBool(value, context)
-            case "max_propagation_cost": config.maxPropagationCost = try parseDouble(value, context)
             case "size_threshold": config.sizeThreshold = try parseDouble(value, context)
             case "sensitivity_threshold": config.sensitivityThreshold = try parseDouble(value, context)
             case "dominance_threshold": config.dominanceThreshold = try parseDouble(value, context)
@@ -99,8 +93,6 @@ public struct ModularityConfig: Sendable, Equatable {
         var result = base
         result.exclude = base.exclude + exclude
         result.includeTests = includeTests ?? base.includeTests
-        result.failOnCycles = failOnCycles ?? base.failOnCycles
-        result.maxPropagationCost = maxPropagationCost ?? base.maxPropagationCost
         result.sizeThreshold = sizeThreshold ?? base.sizeThreshold
         result.sensitivityThreshold = sensitivityThreshold ?? base.sensitivityThreshold
         result.dominanceThreshold = dominanceThreshold ?? base.dominanceThreshold

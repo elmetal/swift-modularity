@@ -41,9 +41,12 @@ swift-modularity-cli package --format json
   with the first reference that creates it (`file → file  \`Symbol\` line N`).
 - **Groups**: Shared (foundation), Core / Central, Peripheral, Control (top-level code).
 
-The file graph comes from syntax only: method calls on values (`x.helper()`) are not resolved, so
-some real dependencies are missing; equal names in different modules are not confused when each
-module is analyzed separately. Read the code before claiming a dependency exists or not.
+The file graph comes from syntax only. Members reached through a value (`x.helper()`) or an
+implicit member expression (`.default`) are not resolved, so some real dependencies are missing:
+a cyclic group can be larger than reported, and removing the listed references may not break it.
+Check by reading the code before claiming a dependency exists or not, or that a change breaks a
+cycle. Small cycles (a type and its extension, a view and its model) are usually fine; don't
+propose changes only to reach zero cycles.
 
 ## Writing the plan
 

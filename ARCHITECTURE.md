@@ -98,11 +98,11 @@ The accuracy of this graph against the compiler's index is measured in
 ```
 Sources/swift-modularity/
   Graph/      DependencyGraph, StronglyConnectedComponents, VisibilityMatrix (+ BitSet)
-  Analysis/   ModularityAnalysis (classification, partition, DSM order), QualityGate
+  Analysis/   ModularityAnalysis (classification, partition, DSM order)
   Syntax/     FileDependencyGraphBuilder (DeclarationCollector, ReferenceCollector)
   Package/    PackageDescription, PackageLoader
   Config/     ModularityConfig (modularity.toml)
-  Output/     ModularityReport (JSON model), TextFormatter, DiagnosticFormatter (xcode/github)
+  Output/     ModularityReport (JSON model), TextFormatter
   Utils/      FileReader, ExcludePattern (shared with swift-similarity), concurrentMap
 Sources/swift-modularity-cli/   `files` and `package` commands
 Plugins/ModularityPlugin/       `swift package modularity`
