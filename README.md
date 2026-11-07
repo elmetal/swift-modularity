@@ -74,8 +74,10 @@ for the exact definitions and how each is computed.
   - *core-periphery*: the Core is 6% or more.
 
   `--size-threshold`, `--sensitivity-threshold` and `--dominance-threshold` change x, y and z. The
-  paper chose its values for its dataset of 1,286 releases of 17 systems and notes that other
-  environments may need others.
+  paper chose its values for its dataset of 1,286 releases of 17 systems, most with hundreds to
+  thousands of files, and notes that other environments may need others. The classification
+  describes the shape of a system; it is not a quality judgment. In a module of a few dozen files
+  one 2-file cycle is already over 4%.
 - **Partition**: each element is *Shared* (widely depended on, depends on little), *Core*,
   *Peripheral* (little in either direction) or *Control* (depends on much, depended on little), by
   comparing its VFI and VFO with the Core's. Hierarchical and multi-core systems are partitioned
@@ -85,11 +87,15 @@ for the exact definitions and how each is computed.
 ### Reading the results
 
 - Each **cyclic group** lists the dependencies between its members, with the first reference that
-  creates each one. Removing references along these dependencies (moving a type, introducing a
-  protocol in a lower file, splitting a file) breaks the cycle. Swift allows any file of a module to
-  use any other, so cycles between files are legal and common; they matter because every file in a
-  group may have to change or be understood together, and they block splitting the module.
-- **Propagation cost** is a system-level number: track it over time, or compare targets. In
+  creates each one. Swift allows any file of a module to use any other, so cycles between files are
+  legal and common, and a small one (a type and its extension, a view and its model) is usually
+  harmless. A large group matters because its files may have to change or be understood together,
+  and it blocks splitting the module. A reported group can be smaller
+  than the real one when the tool misses a dependency:
+  missing dependencies can close a cycle another way, so removing the listed references does not
+  always break it.
+- **Propagation cost** is a system-level number: track it over time, or compare targets of similar
+  size. It is a lower bound at file level, since the tool misses some dependencies. In
   MacCormack et al. (2006) it differs widely between systems with the same function. MacCormack and
   Sturtevant (2016), "Technical debt and system architecture: The impact of coupling on
   defect-related activity" (Journal of Systems and Software 120), found more defect-related
@@ -136,8 +142,6 @@ options override it and `--exclude` patterns are added to its `exclude`.
 ```toml
 exclude = ["**/Generated/**"]   # --exclude (glob patterns, repeatable)
 include_tests = false           # --include-tests (package)
-fail_on_cycles = false          # --fail-on-cycles
-max_propagation_cost = 0.3      # --max-propagation-cost
 size_threshold = 0.05           # --size-threshold
 sensitivity_threshold = 0.01    # --sensitivity-threshold
 dominance_threshold = 0.5       # --dominance-threshold
@@ -146,28 +150,18 @@ limit = 10                      # --limit (elements listed per group in text out
 
 `--no-config` ignores the file.
 
-## Xcode, CI and AI assistants
+## Reports, not verdicts
 
-### Warnings
-`--format xcode` and `--format github` write one warning per dependency inside a cyclic group, at
-the reference that creates it:
+swift-modularity reports measurements; it does not flag or fail anything. No threshold on cycles
+or propagation cost has been shown to improve code quality: the studies relate the Core and
+coupling to maintenance costs, they do not define a level that is acceptable. A gate such as "no
+cycles" would mostly push toward merging files to hide them. So there are no warnings in Xcode or
+on pull requests and no failing exit status (invalid arguments exit with 64).
 
-```
-Sources/App/FilesCommand.swift:23:31: warning: `CommonOptions` (SwiftModularityCLI.swift) depends back on this file, directly or indirectly: cyclic group 1 of 3 files in App, the Core (100.0% of the module) [swift-modularity]
-```
+To follow the measures over time, keep the JSON report of each release or merge:
 
-Use `xcode` in a Run Script build phase (with `ENABLE_USER_SCRIPT_SANDBOXING = NO`, or the source
-directories as input files), and `github` in GitHub Actions to annotate pull requests.
-
-### Failing a build
-- `--fail-on-cycles`: exit with status 1 when any analyzed module has a cyclic group.
-- `--max-propagation-cost 0.3`: exit with status 1 when a module's propagation cost is above 30%.
-
-The results are written as usual; the reasons go to standard error. Invalid arguments exit with 64.
-
-```yaml
-- name: Check modularity
-  run: swift package modularity --format github --fail-on-cycles
+```bash
+swift-modularity-cli package --format json --output modularity.json
 ```
 
 ### AI assistants

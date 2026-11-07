@@ -3,12 +3,12 @@ import Foundation
 import swift_modularity
 
 enum OutputFormat: String, ExpressibleByArgument, CaseIterable {
-    case text, json, xcode, github
+    case text, json
 }
 
 /// Options shared by `files` and `package`.
 struct CommonOptions: ParsableArguments {
-    @Option(name: [.short, .long], help: "Output format: text, json, xcode or github.")
+    @Option(name: [.short, .long], help: "Output format: text or json.")
     var format: OutputFormat = .text
 
     @Option(name: [.short, .long], help: "Write the results to this file instead of standard output.")
@@ -23,12 +23,6 @@ struct CommonOptions: ParsableArguments {
     @Flag(help: "Print the reordered DSM in text output (modules of up to 80 elements).")
     var matrix = false
 
-    @Flag(inversion: .prefixedNo, help: "Exit with status 1 when a module has a cyclic group.")
-    var failOnCycles: Bool?
-
-    @Option(help: "Exit with status 1 when a module's propagation cost is above this value (0 to 1).")
-    var maxPropagationCost: Double?
-
     @Option(help: "Size threshold x of the architecture classification (default 0.05).")
     var sizeThreshold: Double?
 
@@ -42,9 +36,6 @@ struct CommonOptions: ParsableArguments {
     var noConfig = false
 
     func validate() throws {
-        if let maxPropagationCost, !(0...1).contains(maxPropagationCost) {
-            throw ValidationError("--max-propagation-cost must be between 0 and 1.")
-        }
         if let limit, limit < 0 {
             throw ValidationError("--limit must be 0 or more.")
         }
@@ -54,8 +45,6 @@ struct CommonOptions: ParsableArguments {
     func resolvedConfig() -> ModularityConfig {
         var commandLine = ModularityConfig()
         commandLine.exclude = exclude
-        commandLine.failOnCycles = failOnCycles
-        commandLine.maxPropagationCost = maxPropagationCost
         commandLine.sizeThreshold = sizeThreshold
         commandLine.sensitivityThreshold = sensitivityThreshold
         commandLine.dominanceThreshold = dominanceThreshold
@@ -75,7 +64,7 @@ struct CommonOptions: ParsableArguments {
         return commandLine.overriding(file)
     }
 
-    /// Writes the report and exits with status 1 when the quality gate fails.
+    /// Writes the report.
     func emit(_ report: ModularityReport, config: ModularityConfig) throws {
         let text: String
         switch format {
@@ -85,29 +74,12 @@ struct CommonOptions: ParsableArguments {
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
             text = String(decoding: try encoder.encode(report), as: UTF8.self) + "\n"
-        case .xcode:
-            text = Self.terminated(DiagnosticFormatter.format(report, style: .xcode))
-        case .github:
-            text = Self.terminated(DiagnosticFormatter.format(report, style: .github, relativeTo: FileManager.default.currentDirectoryPath))
         }
         if let output {
             try text.write(toFile: output, atomically: true, encoding: .utf8)
         } else {
             FileHandle.standardOutput.write(Data(text.utf8))
         }
-
-        let gate = QualityGate(failOnCycles: config.failOnCycles ?? false, maxPropagationCost: config.maxPropagationCost)
-        let violations = gate.violations(in: report)
-        if !violations.isEmpty {
-            for violation in violations {
-                printDiagnostic("error: \(violation)")
-            }
-            throw ExitCode(1)
-        }
-    }
-
-    private static func terminated(_ text: String) -> String {
-        text.isEmpty ? "" : text + "\n"
     }
 }
 

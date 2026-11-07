@@ -10,7 +10,7 @@ import PackagePlugin
 ///
 /// ```bash
 /// swift package modularity --include-tests
-/// swift package modularity --target App --format github --fail-on-cycles
+/// swift package modularity --target App --format json
 /// ```
 @main
 struct ModularityPlugin: CommandPlugin {
