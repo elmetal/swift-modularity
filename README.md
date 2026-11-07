@@ -226,8 +226,8 @@ swift-modularity-cli package --format json --output modularity.json
 ### AI assistants
 The text output gives cycles with `file:line` references and the role of every file, which an AI
 assistant can read directly. For [Claude Code](https://claude.com/claude-code), copy
-[`.claude/skills/check-modularity/SKILL.md`](.claude/skills/check-modularity/SKILL.md) to
-`.claude/skills/check-modularity/` in your project and ask Claude to check the modularity.
+[`.claude/skills/modularity-review/SKILL.md`](.claude/skills/modularity-review/SKILL.md) to
+`.claude/skills/modularity-review/` in your project and ask Claude to review the modularity (or run `/modularity-review`).
 
 ## License
 MIT
