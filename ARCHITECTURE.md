@@ -105,7 +105,10 @@ report.
 **Targets** (`PackageDescription`, `PackageLoader`): `swift package dump-package`, or the JSON that
 the command plugin writes from SwiftPM's plugin API (a plugin cannot run SwiftPM on its own
 package). Only dependencies on targets of the same package are edges; products of other packages
-are outside the system.
+are outside the system. A target's files are the Swift files under its directory within its
+`sources:` and outside its `exclude:`, as SwiftPM compiles them: from `dump-package`, the two
+lists are applied to the files found; the plugin lists the files SwiftPM gives it (`sourceFiles`).
+`--exclude` and `modularity.toml` patterns are applied on top.
 
 **Files** (`FileDependencyGraphBuilder`): two passes over the SwiftSyntax trees, parsed in parallel.
 

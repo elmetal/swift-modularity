@@ -17,12 +17,42 @@ public struct PackageDescription: Sendable, Codable, Equatable {
         /// The names of the targets of this package that the target depends on. Products of other
         /// packages are not listed.
         public var dependencies: [String]
+        /// The target's `sources:`, relative to `directory`: the files and directories that hold
+        /// its sources. Nil for all of `directory`.
+        public var sources: [String]?
+        /// The target's `exclude:`, relative to `directory`: files and directories that are not
+        /// compiled. Nil for none.
+        public var exclude: [String]?
 
-        public init(name: String, kind: String, directory: String?, dependencies: [String]) {
+        public init(name: String, kind: String, directory: String?, dependencies: [String],
+                    sources: [String]? = nil, exclude: [String]? = nil) {
             self.name = name
             self.kind = kind
             self.directory = directory
             self.dependencies = dependencies
+            self.sources = sources
+            self.exclude = exclude
+        }
+
+        /// The Swift files of the target: those under `directory` that SwiftPM compiles (within
+        /// `sources`, outside `exclude`), less those matching `patterns`.
+        public func swiftFiles(excluding patterns: [ExcludePattern] = []) throws -> [String] {
+            guard let directory else { return [] }
+            let files = try FileReader.findSwiftFiles(in: directory, excluding: patterns)
+            let sources = sources?.map(Self.components)
+            let exclude = (exclude ?? []).map(Self.components)
+            guard sources != nil || !exclude.isEmpty else { return files }
+            return files.filter { file in
+                // FileReader spells the files under `directory` as given.
+                let relative = Self.components(String(file.dropFirst(directory.count)))
+                if let sources, !sources.contains(where: { relative.starts(with: $0) }) { return false }
+                return !exclude.contains { relative.starts(with: $0) }
+            }
+        }
+
+        /// The components of a relative path, without `.` and empty ones.
+        private static func components(_ path: String) -> [Substring] {
+            path.split(separator: "/").filter { $0 != "." }
         }
 
         /// Whether the target has Swift sources that can be analyzed.
@@ -115,7 +145,10 @@ public enum PackageLoader {
                 return nil
             }
             let sourceDirectory = resolveDirectory(of: name, kind: kind, path: target["path"] as? String, in: directory)
-            return PackageDescription.Target(name: name, kind: kind, directory: sourceDirectory, dependencies: dependencies)
+            let exclude = target["exclude"] as? [String] ?? []
+            return PackageDescription.Target(name: name, kind: kind, directory: sourceDirectory, dependencies: dependencies,
+                                             sources: target["sources"] as? [String],
+                                             exclude: exclude.isEmpty ? nil : exclude)
         }
         return PackageDescription(name: name, directory: directory.path, targets: parsed)
     }

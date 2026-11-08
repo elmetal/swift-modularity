@@ -28,8 +28,18 @@ struct ModularityPlugin: CommandPlugin {
                 "kind": Self.kind(of: target),
                 "dependencies": dependencies,
             ]
-            if target is SwiftSourceModuleTarget {
-                description["directory"] = target.directoryURL.path
+            if let module = target as? SwiftSourceModuleTarget {
+                let directory = module.directoryURL.path
+                description["directory"] = directory
+                // The files SwiftPM compiles, after the manifest's `sources:` and `exclude:`.
+                // `sourceFiles` also lists the target's other files (resources, and files outside
+                // `sources:` as unknown), so keep the sources only.
+                description["sources"] = module.sourceFiles.compactMap { file -> String? in
+                    let path = file.url.path
+                    guard file.type == .source, file.url.pathExtension == "swift",
+                          path.hasPrefix(directory + "/") else { return nil }
+                    return String(path.dropFirst(directory.count + 1))
+                }
             }
             return description
         }

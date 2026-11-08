@@ -62,7 +62,7 @@ enum Analyze {
             let exclude = config.exclude.map(ExcludePattern.init)
             for target in selected {
                 guard let directory = target.directory else { continue }
-                let files = try FileReader.findSwiftFiles(in: directory, excluding: exclude)
+                let files = try target.swiftFiles(excluding: exclude)
                 // C and C++ targets have no Swift files.
                 guard !files.isEmpty else { continue }
                 let shownDirectory = FileDependencyGraphBuilder.displayPath(directory, relativeTo: package.directory)
