@@ -165,14 +165,19 @@ private let gitIsAvailable = (try? Git(directory: FileManager.default.currentDir
         #expect(throws: Git.GitError.self) { try git.commit("no-such-branch") }
     }
 
-    @Test func checksOutARevisionIntoATemporaryWorktree() throws {
+    @Test func exportsARevisionWithoutWritingToTheRepository() throws {
         let (git, root) = try makeRepository()
         defer { try? FileManager.default.removeItem(at: root) }
-        let worktree = try git.addWorktree(at: git.commit("main"))
-        #expect(FileManager.default.fileExists(atPath: worktree.path + "/A.swift"))
-        #expect(!FileManager.default.fileExists(atPath: worktree.path + "/B.swift"))
-        worktree.remove()
-        #expect(!FileManager.default.fileExists(atPath: worktree.path))
-        #expect(try !git.run(["worktree", "list"]).contains(worktree.path))
+        let gitDirectory = root.appendingPathComponent(".git")
+        let before = try FileManager.default.subpathsOfDirectory(atPath: gitDirectory.path).sorted()
+        let index = try Data(contentsOf: gitDirectory.appendingPathComponent("index"))
+
+        let export = try git.export(git.commit("main"))
+        #expect(FileManager.default.fileExists(atPath: export.path + "/A.swift"))
+        #expect(!FileManager.default.fileExists(atPath: export.path + "/B.swift"))
+        #expect(try FileManager.default.subpathsOfDirectory(atPath: gitDirectory.path).sorted() == before)
+        #expect(try Data(contentsOf: gitDirectory.appendingPathComponent("index")) == index)
+        export.remove()
+        #expect(!FileManager.default.fileExists(atPath: export.path))
     }
 }
