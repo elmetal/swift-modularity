@@ -64,7 +64,8 @@ for the exact definitions and how each is computed.
 
 - **Dependency (first-order DSM)**: element A depends on B when a change to B may require a change
   to A. Targets: the target dependencies in `Package.swift`. Files: A refers to a name declared in B
-  (see [How file dependencies are found](#how-file-dependencies-are-found)).
+  (see [How file dependencies are found](#how-file-dependencies-are-found)). A target's files are
+  those SwiftPM compiles, after the `sources:` and `exclude:` of `Package.swift`.
 - **VFO / VFI** (visibility fan-out / fan-in): how many elements an element depends on, and how many
   depend on it, directly or indirectly, counting itself.
 - **Propagation cost**: the density of the visibility matrix, `Σ VFO / n²`, the fraction of the

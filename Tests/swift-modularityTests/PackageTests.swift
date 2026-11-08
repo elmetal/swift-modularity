@@ -27,6 +27,41 @@ import Testing
         #expect(graph.edges.isEmpty)
     }
 
+    @Test func parsesSourcesAndExclude() throws {
+        let json = """
+        {"name": "Demo", "targets": [
+          {"name": "Core", "type": "regular", "path": "Core", "sources": ["Kept.swift", "Main"], "exclude": [], "dependencies": []},
+          {"name": "App", "type": "regular", "path": "App", "sources": null, "exclude": ["Old"], "dependencies": []}
+        ]}
+        """
+        let package = try PackageLoader.parseDumpPackage(Data(json.utf8), packageDirectory: "/tmp/Demo")
+        #expect(package.targets.map(\.sources) == [["Kept.swift", "Main"], nil])
+        #expect(package.targets.map(\.exclude) == [nil, ["Old"]])
+    }
+
+    @Test func swiftFilesFollowSourcesAndExclude() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("PackageTests-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        for file in ["A.swift", "Main/B.swift", "Main/Old/C.swift", "Mainly/D.swift", "Generated/E.swift"] {
+            let url = root.appendingPathComponent(file)
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try "struct S {}".write(to: url, atomically: true, encoding: .utf8)
+        }
+        func files(sources: [String]?, exclude: [String]?, patterns: [String] = []) throws -> [String] {
+            let target = PackageDescription.Target(name: "T", kind: "regular", directory: root.path, dependencies: [],
+                                                   sources: sources, exclude: exclude)
+            return try target.swiftFiles(excluding: patterns.map(ExcludePattern.init))
+                .map { String($0.dropFirst(root.path.count + 1)) }
+        }
+        #expect(try files(sources: nil, exclude: nil)
+                == ["A.swift", "Generated/E.swift", "Main/B.swift", "Main/Old/C.swift", "Mainly/D.swift"])
+        // A directory covers the files under it, not those of a directory whose name starts the same.
+        #expect(try files(sources: ["./Main/", "A.swift"], exclude: ["Main/Old"]) == ["A.swift", "Main/B.swift"])
+        #expect(try files(sources: nil, exclude: ["Main", "A.swift"], patterns: ["Generated"]) == ["Mainly/D.swift"])
+        // The plugin lists every file; none for a target without Swift files.
+        #expect(try files(sources: [], exclude: nil).isEmpty)
+    }
+
     @Test func targetGraph() {
         let package = PackageDescription(name: "P", directory: "/p", targets: [
             .init(name: "App", kind: "executable", directory: "/p/Sources/App", dependencies: ["Feature", "Core"]),
