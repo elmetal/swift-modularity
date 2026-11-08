@@ -147,6 +147,10 @@ private let gitIsAvailable = (try? Git(directory: FileManager.default.currentDir
         try git.run(["init", "--quiet", "--initial-branch=main"])
         try git.run(["config", "user.name", "Test"])
         try git.run(["config", "user.email", "test@example.com"])
+        // `git commit` may start auto maintenance in the background, which would write
+        // to `.git` while a test compares its contents.
+        try git.run(["config", "maintenance.auto", "false"])
+        try git.run(["config", "gc.auto", "0"])
         try "struct A {}\n".write(to: root.appendingPathComponent("A.swift"), atomically: true, encoding: .utf8)
         try git.run(["add", "."])
         try git.run(["commit", "--quiet", "-m", "base"])
@@ -175,7 +179,11 @@ private let gitIsAvailable = (try? Git(directory: FileManager.default.currentDir
         let export = try git.export(git.commit("main"))
         #expect(FileManager.default.fileExists(atPath: export.path + "/A.swift"))
         #expect(!FileManager.default.fileExists(atPath: export.path + "/B.swift"))
-        #expect(try FileManager.default.subpathsOfDirectory(atPath: gitDirectory.path).sorted() == before)
+        let after = try FileManager.default.subpathsOfDirectory(atPath: gitDirectory.path).sorted()
+        #expect(
+            after == before,
+            "added: \(Set(after).subtracting(before).sorted()), removed: \(Set(before).subtracting(after).sorted())"
+        )
         #expect(try Data(contentsOf: gitDirectory.appendingPathComponent("index")) == index)
         export.remove()
         #expect(!FileManager.default.fileExists(atPath: export.path))
