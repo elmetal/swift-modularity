@@ -74,9 +74,14 @@ one change does.
 ## Changes between revisions
 
 `diff` resolves the two sides with git (`merge-base` for `A...B` and the default range), checks
-out each revision with `git worktree add --detach` into a temporary directory, runs the same
-analysis as `package` or `files` with the directory standing for the current one, and rewrites
-the paths of the report to the working tree's. `ModularityDiff` then compares the two reports:
+out each revision into a temporary directory (`git read-tree` into a temporary index file, then
+`git checkout-index --prefix`: nothing is written into `.git`, so this works in the command
+plugin's sandbox), runs the same analysis as `package` or `files` with the directory standing for
+the current one, and rewrites the paths of the report to the working tree's. Run by the plugin,
+the working tree's targets come from the plugin's JSON, since `dump-package` would wait for the
+package SwiftPM holds, and the other revisions' manifests are read with
+`dump-package --disable-sandbox`, since SwiftPM's manifest sandbox cannot start inside the
+plugin's. `ModularityDiff` then compares the two reports:
 modules by level and name, elements by name, dependencies by their two ends. Each cyclic group of
 the newer side continues the older group with which it shares the most members, at least two
 (two members that still depend on each other); a newer group without one is new, an older group
@@ -133,7 +138,7 @@ Sources/swift-modularity/
   Syntax/     FileDependencyGraphBuilder (DeclarationCollector, ReferenceCollector)
   Package/    PackageDescription, PackageLoader
   Config/     ModularityConfig (modularity.toml)
-  Diff/       RevisionRange, Git (merge base, temporary worktrees), ModularityDiff
+  Diff/       RevisionRange, Git (merge base, temporary exports), ModularityDiff
   Output/     ModularityReport (JSON model), TextFormatter, DiagnosticFormatter (notes), DiffFormatter
   Utils/      FileReader, ExcludePattern, concurrentMap
 Sources/swift-modularity-cli/   `files`, `package` and `diff` commands

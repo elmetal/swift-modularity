@@ -2,15 +2,18 @@ import Foundation
 import PackagePlugin
 
 /// `swift package modularity [--target <name>]... [options]`
+/// `swift package modularity diff [<revisions>] [options]`
 ///
 /// Describes the package's targets and their dependencies as JSON (SwiftPM's plugin API knows
 /// them without running `swift package dump-package`, which a plugin cannot do while SwiftPM holds
 /// the package), then runs `swift-modularity-cli package --package-description <file>` with every
-/// other argument, for example:
+/// other argument, or `swift-modularity-cli diff --package-description <file>` for the working
+/// tree's side of a diff, for example:
 ///
 /// ```bash
 /// swift package modularity --include-tests
 /// swift package modularity --target App --format json
+/// swift package modularity diff main...HEAD --format github
 /// ```
 @main
 struct ModularityPlugin: CommandPlugin {
@@ -41,7 +44,19 @@ struct ModularityPlugin: CommandPlugin {
         let tool = try context.tool(named: "swift-modularity-cli")
         let process = Process()
         process.executableURL = tool.url
-        process.arguments = ["package", "--package-description", descriptionURL.path] + arguments
+        if arguments.first == "diff" {
+            var diffArguments = ["diff"]
+            // The description is of this package as it is on disk; paths after -- or another
+            // package directory are analyzed by the tool itself.
+            if !arguments.contains("--") && !arguments.contains(where: { $0.hasPrefix("--package-path") }) {
+                diffArguments += ["--package-description", descriptionURL.path]
+            }
+            process.arguments = diffArguments + arguments.dropFirst()
+        } else {
+            process.arguments = ["package", "--package-description", descriptionURL.path] + arguments
+        }
+        // Tells the tool that it runs in the plugin's sandbox (see `DiffCommand`).
+        process.environment = ProcessInfo.processInfo.environment.merging(["SWIFT_MODULARITY_PLUGIN": "1"]) { $1 }
         // Run in the package directory, so that `modularity.toml` there is found and GitHub
         // annotation paths are relative to it.
         process.currentDirectoryURL = context.package.directoryURL

@@ -2,8 +2,9 @@ import Foundation
 
 // MARK: - Git
 
-/// The git commands that `diff` needs: resolving revisions and checking one out into a temporary
-/// worktree, so that the user's working tree is never touched.
+/// The git commands that `diff` needs: resolving revisions and exporting one into a temporary
+/// directory. Nothing is written to the repository, so this also works in the sandbox of the
+/// command plugin, which may only read the package directory.
 public struct Git: Sendable {
     public struct GitError: Error, CustomStringConvertible {
         public let description: String
@@ -16,10 +17,14 @@ public struct Git: Sendable {
         self.directory = directory
     }
 
-    /// Runs git with `arguments` and returns its standard output without the final newline.
+    /// Runs git with `arguments` (and `environment` over the current one) and returns its standard
+    /// output without the final newline.
     @discardableResult
-    public func run(_ arguments: [String]) throws -> String {
+    public func run(_ arguments: [String], environment: [String: String] = [:]) throws -> String {
         let process = Process()
+        if !environment.isEmpty {
+            process.environment = ProcessInfo.processInfo.environment.merging(environment) { $1 }
+        }
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         process.arguments = ["git", "-C", directory] + arguments
         let output = Pipe()
@@ -81,24 +86,36 @@ public struct Git: Sendable {
         throw GitError(description: "Found no default branch (origin/HEAD, main or master); give the revisions to compare, such as `main...HEAD`.")
     }
 
-    /// Checks out `commit` into a new temporary directory, outside the repository.
-    public func addWorktree(at commit: String) throws -> Worktree {
-        let parent = URL(fileURLWithPath: NSTemporaryDirectory()).resolvingSymlinksInPath()
+    /// Writes the files of `commit` into a new temporary directory, outside the repository.
+    ///
+    /// The tree is read into a temporary index file and checked out from it, rather than with
+    /// `git worktree add`, which records the worktree in `.git`.
+    public func export(_ commit: String) throws -> Export {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory()).resolvingSymlinksInPath()
             .appendingPathComponent("swift-modularity-\(UUID().uuidString)")
-        try run(["worktree", "add", "--detach", "--quiet", parent.path, commit])
-        return Worktree(git: self, path: parent.path)
+        let export = Export(root: root.path)
+        do {
+            try FileManager.default.createDirectory(atPath: export.path, withIntermediateDirectories: true)
+            let index = ["GIT_INDEX_FILE": root.appendingPathComponent("index").path]
+            try run(["read-tree", commit], environment: index)
+            try run(["checkout-index", "--all", "--prefix=\(export.path)/"], environment: index)
+        } catch {
+            export.remove()
+            throw error
+        }
+        return export
     }
 
-    /// A temporary checkout; `remove()` deletes it.
-    public struct Worktree: Sendable {
-        let git: Git
-        public let path: String
+    /// The files of a commit in a temporary directory; `remove()` deletes them.
+    public struct Export: Sendable {
+        /// The directory holding the files and the temporary index.
+        let root: String
+
+        /// The directory of the files: the commit's root directory.
+        public var path: String { root + "/tree" }
 
         public func remove() {
-            if (try? git.run(["worktree", "remove", "--force", path])) == nil {
-                try? FileManager.default.removeItem(atPath: path)
-                _ = try? git.run(["worktree", "prune"])
-            }
+            try? FileManager.default.removeItem(atPath: root)
         }
     }
 }

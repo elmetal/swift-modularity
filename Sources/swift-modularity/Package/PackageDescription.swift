@@ -67,10 +67,14 @@ public enum PackageLoader {
     }
 
     /// Runs `swift package dump-package` in `packageDirectory` and parses its output.
-    public static func load(packageDirectory: String) throws -> PackageDescription {
+    ///
+    /// - Parameter disableSandbox: Compile the manifest outside SwiftPM's sandbox, which cannot be
+    ///   started from inside another one (such as a command plugin's).
+    public static func load(packageDirectory: String, disableSandbox: Bool = false) throws -> PackageDescription {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = ["swift", "package", "--package-path", packageDirectory, "dump-package"]
+        process.arguments = ["swift", "package"] + (disableSandbox ? ["--disable-sandbox"] : [])
+            + ["--package-path", packageDirectory, "dump-package"]
         let output = Pipe()
         let errors = Pipe()
         process.standardOutput = output

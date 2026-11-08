@@ -172,10 +172,19 @@ new, grew, shrank or are no longer cycles. The revisions are written as in `git 
 
 Both sides are analyzed on the spot, with the same version of the tool and the same
 `modularity.toml`, so no report has to be kept between runs, and a change to the tool never makes
-the two sides incomparable. A revision is checked out into a temporary git worktree; the working
-tree is not touched. Without paths, the package in `--package-path` is analyzed as `package` does;
-after `--`, the paths are analyzed as one module, as `files` does. `diff` runs from the
-command-line tool, not from the command plugin.
+the two sides incomparable. A revision is exported into a temporary directory; nothing in the
+repository is written. Without paths, the package in `--package-path` is analyzed as `package`
+does; after `--`, the paths are analyzed as one module, as `files` does.
+
+The command plugin runs it too, in its sandbox and without extra permissions:
+
+```bash
+swift package modularity diff main...HEAD --format github
+```
+
+There, the working tree's targets come from SwiftPM's plugin API, and the manifests of the other
+revisions are read with `swift package dump-package --disable-sandbox` (SwiftPM cannot start its
+manifest sandbox inside the plugin's), using the `swift` on `PATH`.
 
 ```
 App (files) — App
