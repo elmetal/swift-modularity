@@ -95,6 +95,9 @@ two files and fewer than all of them. For each, it collects the dependencies lea
 entering it; with none leaving, the directory is a candidate lower target, with none entering a
 candidate upper target. For blocked directories the files the directory needs, directly or
 indirectly, come from the visibility matrix (what would move with it to make a lower target).
+For each cyclic group with members on both sides of a blocked directory's boundary, the groups
+left when the outgoing dependencies are removed together come from `CycleBreaking`; removing the
+incoming ones instead leaves the same groups, the cycles within each side.
 Candidates come first (largest first), then blocked directories by the fewest dependencies to
 remove in the cheaper direction. Directories are the only sets considered: they are how a codebase
 already groups its files, and searching all sets of files that could be split is not useful to

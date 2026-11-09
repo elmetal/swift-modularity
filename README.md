@@ -157,17 +157,26 @@ off works without a cycle between targets when dependencies cross its boundary i
 - otherwise it is **blocked**, and the dependencies to remove in the cheaper direction are listed,
   or the files it needs that could move with it.
 
+For a blocked directory, the tool also reports what removing all the listed dependencies together
+does to each cyclic group that crosses its boundary. Once dependencies cross the boundary in one
+direction only, no cycle can cross it, so the group splits into the cycles among its files inside
+and among its files outside; both directions leave the same groups. For a large group that no
+single dependency splits, this shows how far a planned split shrinks it. A blocked directory that
+no cycle crosses is blocked by layering only (it sits between files that use it and files it uses).
+
 ```
   Directories as targets (...):
     Models/ (2 files): candidate lower target — depends on nothing else here; 5 dependencies (8 references) from other files would use it
     Util/ (2 files): candidate lower target — depends on nothing else here; 1 dependency (2 references) from other files would use it
     Features/Search/ (2 files): blocked — as a higher target, remove 1 dependency (2 references):
         App.swift → Features/Search/SearchView.swift  `SearchView` line 4 (2 references)
+        Removing them all splits cyclic group 1 (9 files): largest group left 5 files (5 + 2)
 ```
 
 The references that cross the boundary are the declarations that would have to become `public`.
 These are candidates: a dependency the tool cannot see can block one; the compiler settles it
-when the directory is moved.
+when the directory is moved. For the same reason the groups left after a split are a best case: a
+missing dependency can keep more files in a cycle.
 
 ## Changes between revisions
 

@@ -51,6 +51,44 @@ import Testing
         #expect(Array(order.dropFirst()) == ["Core/", "Features/", "Features/Profile/"])
     }
 
+    @Test func noCycleCrossesABoundaryInAnAcyclicGraph() {
+        #expect(candidates().values.allSatisfy { $0.splitGroups.isEmpty })
+    }
+
+    @Test func removingTheBlockingDependenciesSplitsTheGroupAtTheBoundary() {
+        // One cyclic group of 7 files: Dir/ holds the cycle a ⇄ b and o1 ⇄ o2 ⇄ o3 is outside;
+        // Dir/ and the rest use each other through 2 dependencies each way, and x.swift ⇄ o1
+        // stays outside too.
+        let graph = DependencyGraph(
+            names: ["Dir/a.swift", "Dir/b.swift", "Dir/c.swift", "o1.swift", "o2.swift", "o3.swift", "x.swift"],
+            dependencies: [
+                ("Dir/a.swift", "Dir/b.swift"), ("Dir/b.swift", "Dir/a.swift"), ("Dir/b.swift", "Dir/c.swift"),
+                ("o1.swift", "o2.swift"), ("o2.swift", "o3.swift"), ("o3.swift", "o1.swift"),
+                ("o1.swift", "x.swift"), ("x.swift", "o1.swift"),
+                ("Dir/c.swift", "o1.swift"), ("Dir/a.swift", "o2.swift"),
+                ("o3.swift", "Dir/a.swift"), ("x.swift", "Dir/b.swift"),
+            ]
+        )
+        let analysis = ModularityAnalysis(graph: graph)
+        #expect(analysis.cyclicGroups.map(\.count) == [7])
+        let dir = Extraction.directoryCandidates(in: analysis).first { $0.directory == "Dir/" }!
+        #expect(dir.isBlocked)
+        #expect(dir.splitGroups == [.init(group: 0, groupSize: 7, remainingGroupSizes: [4, 2])])
+        // The same groups are left removing the incoming dependencies instead.
+        #expect(CycleBreaking.remainingGroupSizes(in: graph, group: analysis.cyclicGroups[0], removing: dir.incoming) == [4, 2])
+    }
+
+    @Test func aBlockedDirectoryOutsideTheCycleSplitsNothing() {
+        // Dir/ uses a ⇄ b and b uses Dir/, but nothing in Dir/ leads back: no cycle crosses it.
+        let graph = DependencyGraph(
+            names: ["Dir/p.swift", "Dir/q.swift", "a.swift", "b.swift", "c.swift"],
+            dependencies: [("a.swift", "b.swift"), ("b.swift", "a.swift"), ("Dir/p.swift", "a.swift"), ("c.swift", "Dir/q.swift")]
+        )
+        let dir = Extraction.directoryCandidates(in: ModularityAnalysis(graph: graph)).first { $0.directory == "Dir/" }!
+        #expect(dir.isBlocked)
+        #expect(dir.splitGroups.isEmpty)
+    }
+
     @Test func theWholeModuleIsNotACandidate() {
         let graph = DependencyGraph(names: ["Sources/A.swift", "Sources/B.swift"], dependencies: [("Sources/A.swift", "Sources/B.swift")])
         #expect(Extraction.directoryCandidates(in: ModularityAnalysis(graph: graph)).isEmpty)

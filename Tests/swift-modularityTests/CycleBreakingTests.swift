@@ -25,6 +25,16 @@ import Testing
         #expect(result.map(\.reduction) == [3, 3, 2, 2, 2])
     }
 
+    @Test func removingSeveralDependenciesTogether() {
+        // Every pair depends on each other: no single dependency splits it, but cutting c off does.
+        let names = ["a", "b", "c"]
+        let dependencies = names.flatMap { a in names.filter { $0 != a }.map { (a, $0) } }
+        let graph = DependencyGraph(names: names, dependencies: dependencies)
+        let intoC = graph.edges.filter { $0.to == 2 }
+        #expect(CycleBreaking.remainingGroupSizes(in: graph, group: [0, 1, 2], removing: intoC) == [2])
+        #expect(CycleBreaking.remainingGroupSizes(in: graph, group: [0, 1, 2], removing: []) == [3])
+    }
+
     @Test func noSingleDependencySplitsADenseGroup() {
         // Every pair depends on each other.
         let names = ["a", "b", "c"]

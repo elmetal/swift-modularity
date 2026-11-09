@@ -42,7 +42,7 @@ public enum CycleBreaking {
         var result: [BreakingDependency] = []
         for (from, targets) in successors.enumerated() {
             for to in targets {
-                let remaining = remainingGroupSizes(successors, removing: (from, to))
+                let remaining = remainingGroupSizes(successors, removing: [(from, to)])
                 guard (remaining.first ?? 0) < group.count,
                       let edge = graph.edge(from: group[from], to: group[to]) else { continue }
                 result.append(BreakingDependency(edge: edge, groupSize: group.count, remainingGroupSizes: remaining))
@@ -60,17 +60,25 @@ public enum CycleBreaking {
     /// removed, largest first. If `from → to` is not a dependency inside the group, the group is
     /// left as it is.
     public static func remainingGroupSizes(in graph: DependencyGraph, group: [Int], removing from: Int, _ to: Int) -> [Int] {
-        let local = Dictionary(uniqueKeysWithValues: group.enumerated().map { ($1, $0) })
-        let successors = group.map { member in graph.successors[member].compactMap { local[$0] } }
-        guard let localFrom = local[from], let localTo = local[to] else {
-            return remainingGroupSizes(successors, removing: nil)
-        }
-        return remainingGroupSizes(successors, removing: (localFrom, localTo))
+        remainingGroupSizes(in: graph, group: group, removing: [(from, to)])
     }
 
-    private static func remainingGroupSizes(_ successors: [[Int]], removing edge: (Int, Int)?) -> [Int] {
+    /// The sizes of the cyclic groups left in `group` of `graph` when all of `dependencies` are
+    /// removed together, largest first. Dependencies that are not inside the group are ignored.
+    public static func remainingGroupSizes(in graph: DependencyGraph, group: [Int], removing dependencies: [DependencyGraph.Edge]) -> [Int] {
+        remainingGroupSizes(in: graph, group: group, removing: dependencies.map { ($0.from, $0.to) })
+    }
+
+    private static func remainingGroupSizes(in graph: DependencyGraph, group: [Int], removing dependencies: [(Int, Int)]) -> [Int] {
+        let local = Dictionary(uniqueKeysWithValues: group.enumerated().map { ($1, $0) })
+        let successors = group.map { member in graph.successors[member].compactMap { local[$0] } }
+        let removed = dependencies.compactMap { from, to in local[from].flatMap { f in local[to].map { (f, $0) } } }
+        return remainingGroupSizes(successors, removing: removed)
+    }
+
+    private static func remainingGroupSizes(_ successors: [[Int]], removing edges: [(Int, Int)]) -> [Int] {
         var pruned = successors
-        if let (from, to) = edge {
+        for (from, to) in edges {
             pruned[from].removeAll { $0 == to }
         }
         return StronglyConnectedComponents(successors: pruned).components

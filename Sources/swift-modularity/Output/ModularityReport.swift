@@ -82,6 +82,18 @@ public struct ModuleReport: Sendable, Codable, Equatable {
         public var incoming: [Dependency]
         /// Files outside the directory that its files depend on, directly or indirectly.
         public var requiredFiles: [String]
+        /// The cyclic groups that cross the directory's boundary, and what is left of each when
+        /// the dependencies blocking it are removed together (in either direction).
+        public var splitGroups: [GroupSplitReport]
+    }
+
+    /// A cyclic group cut by a blocked directory's boundary (see `ExtractionCandidate.splitGroups`).
+    public struct GroupSplitReport: Sendable, Codable, Equatable {
+        /// The 1-based number of the group in `cyclicGroups`.
+        public var group: Int
+        public var size: Int
+        /// The sizes of the cyclic groups left among its members, largest first.
+        public var remainingGroups: [Int]
     }
 
     public var name: String
@@ -152,7 +164,10 @@ public struct ModuleReport: Sendable, Codable, Equatable {
                                       canBeUpperTarget: candidate.canBeUpperTarget,
                                       outgoing: candidate.outgoing.map(dependency),
                                       incoming: candidate.incoming.map(dependency),
-                                      requiredFiles: candidate.requiredFiles.map { graph.nodes[$0].name })
+                                      requiredFiles: candidate.requiredFiles.map { graph.nodes[$0].name },
+                                      splitGroups: candidate.splitGroups.map {
+                                          GroupSplitReport(group: $0.group + 1, size: $0.groupSize, remainingGroups: $0.remainingGroupSizes)
+                                      })
         } : []
         self.unreadableFiles = unreadableFiles
     }
