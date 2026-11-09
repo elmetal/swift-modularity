@@ -242,7 +242,10 @@ Parameters, local variables and generic parameters shadow other names. Known lim
 - **Members reached through a value are not resolved.** `text.indented()`, where `indented` is
   added by an extension in another file, or an implicit member expression such as `.default`, needs
   the type of the value. These are most of the dependencies the tool misses, so propagation cost is
-  a lower bound.
+  a lower bound. A key path is resolved up to its first member (`\Model.name`); one without its
+  root (`\.theme`, as in `@Environment(\.theme)`) only when that name is not ambiguous: one
+  extension of a type from another module (such as `EnvironmentValues`) declares it, or else one
+  type of the module does.
 - Overloads with the same argument labels but different types depend on every file declaring one.
 - Declarations and references inside `#if` count whatever the condition.
 - `files` treats everything it is given as one module; analyze each module separately (or use
