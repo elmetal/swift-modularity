@@ -72,4 +72,25 @@ import Testing
         // VFO: App 3, Feature 2, Core 1 → 6 / 9.
         #expect(abs(analysis.propagationCost - 6.0 / 9.0) < 1e-12)
     }
+
+    /// Runs `script` with `sh` and returns why it failed, as `PackageLoader` reports it.
+    func failureReason(_ script: String) throws -> String {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/sh")
+        process.arguments = ["-c", script]
+        try process.run()
+        process.waitUntilExit()
+        return PackageLoader.failureReason(errors: Data(), output: Data(), process: process)
+    }
+
+    @Test func failureReasonFallsBackToOutputThenTermination() throws {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/false")
+        try process.run()
+        process.waitUntilExit()
+        #expect(PackageLoader.failureReason(errors: Data("error: bad\n".utf8), output: Data("out".utf8), process: process) == "error: bad\nout")
+        #expect(PackageLoader.failureReason(errors: Data(" \n".utf8), output: Data("error: on stdout\n".utf8), process: process) == "error: on stdout")
+        #expect(try failureReason("exit 3") == "exited with status 3, with no output")
+        #expect(try failureReason("kill -9 $$") == "terminated by signal 9, with no output")
+    }
 }
