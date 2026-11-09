@@ -70,4 +70,22 @@ import Testing
         #expect(text.contains("Util/ (2 files): candidate lower target — depends on nothing else here; 1 dependency (1 reference) from other files would use it"))
         #expect(report.modules[0].extractionCandidates.map(\.directory) == ["Util/"])
     }
+
+    @Test func blockingDependenciesFollowTheLimit() {
+        // Dir/ uses 4 files outside it, and 5 files outside it use Dir/.
+        let outside = (1...5).map { "O\($0).swift" }
+        let graph = DependencyGraph(
+            names: ["Dir/A.swift", "Dir/B.swift"] + outside,
+            dependencies: outside.prefix(4).map { ("Dir/A.swift", $0) } + outside.map { ($0, "Dir/B.swift") }
+        )
+        let report = ModularityReport(modules: [ModuleReport(name: "App", level: .file, directory: nil, analysis: ModularityAnalysis(graph: graph))])
+        let blocked = "blocked — as a lower target, remove 4 dependencies"
+        let shortened = TextFormatter().format(report)
+        #expect(shortened.contains(blocked))
+        #expect(!shortened.contains("Dir/A.swift → O4.swift"))
+        #expect(shortened.contains("… and 1 more (--limit 0 lists all)"))
+        let all = TextFormatter(limit: 0).format(report)
+        #expect(all.contains("Dir/A.swift → O4.swift"))
+        #expect(!all.contains("… and"))
+    }
 }
