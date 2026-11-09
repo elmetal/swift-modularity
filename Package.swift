@@ -6,10 +6,9 @@ import PackageDescription
 let package = Package(
     name: "swift-modularity",
     platforms: [.macOS(.v13)],
+    // No library product: the analysis is used through the command-line tool and the plugin, and
+    // other tools read its JSON output, so its Swift API is not promised.
     products: [
-        .library(
-            name: "swift-modularity",
-            targets: ["swift-modularity"]),
         .executable(
             name: "swift-modularity-cli",
             targets: ["swift-modularity-cli"]),
