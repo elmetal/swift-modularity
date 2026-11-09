@@ -43,6 +43,27 @@ import Testing
         #expect(result == ["Sub.swift → Base.swift", "Sub.swift → Proto.swift", "Sub.swift → Wrapper.swift", "Sub.swift → Factory.swift"])
     }
 
+    @Test func keyPaths() {
+        let result = dependencies([
+            ("Theme.swift", "extension EnvironmentValues { var theme: Int { 0 } }"),
+            ("Model.swift", "struct Model { var name: String; var id: Int }"),
+            ("Item.swift", "struct Item { var id: Int }"),
+            ("View.swift", """
+                struct View {
+                    @Environment(\\.theme) var theme
+                    let sorted = [Item]().map(\\.id)
+                }
+                """),
+            ("Other.swift", "struct Other { @Environment(\\.theme) var theme }"),
+            ("Sort.swift", "struct Sort { var name = 0; let key = \\Model.name }"),
+        ])
+        // Both views name their own `theme` too, but `\.theme` is EnvironmentValues'. `\.id`
+        // could be Model's or Item's. `name` in `\Model.name` is Model's, not Sort's own.
+        #expect(result == [
+            "View.swift → Theme.swift", "View.swift → Item.swift", "Other.swift → Theme.swift", "Sort.swift → Model.swift",
+        ])
+    }
+
     @Test func extensionsDependOnTheExtendedType() {
         let result = dependencies([
             ("Model.swift", "struct Model {}"),

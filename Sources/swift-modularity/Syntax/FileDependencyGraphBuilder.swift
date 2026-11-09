@@ -22,7 +22,9 @@ import SwiftSyntax
 /// graph is an approximation, with known limits:
 ///
 /// - Members reached through a value (`value.helper()`) or an implicit member expression
-///   (`.helper`) are not resolved: that needs the type of the value.
+///   (`.helper`) are not resolved: that needs the type of the value. A key path is resolved up to
+///   its first member (`\Model.name`); without its root (`\.name`), only when one extension of a
+///   type of another module, or else one type of the module, has a member of that name.
 /// - Names are matched by text. Local variables, parameters and generic parameters shadow other
 ///   names; overloads are not told apart, so a name declared in several files depends on all of
 ///   them.
@@ -140,9 +142,14 @@ struct SymbolTable: Sendable {
     private(set) var members: [String: [String: [(file: Int, member: Declarations.Member)]]] = [:]
     /// The protocols and superclasses (declared in the module) of each type.
     private(set) var supertypes: [String: Set<String>] = [:]
+    /// The types that declare a member of each name that other files can see.
+    private var typesWithMember: [String: Set<String>] = [:]
+    /// Every type declared in the module, file-private ones included.
+    private var declaredTypes: Set<String> = []
 
     init(_ files: [Declarations]) {
         for (file, declarations) in files.enumerated() {
+            declaredTypes.formUnion(declarations.types)
             for name in declarations.types.subtracting(declarations.privateTypes) {
                 types[name, default: []].insert(file)
             }
@@ -152,6 +159,7 @@ struct SymbolTable: Sendable {
             for (type, list) in declarations.members {
                 for member in list {
                     members[type, default: [:]][member.name, default: []].append((file, member))
+                    if member.isVisible { typesWithMember[member.name, default: []].insert(type) }
                 }
             }
         }
@@ -204,6 +212,17 @@ struct SymbolTable: Sendable {
             level = level.flatMap { supertypes[$0] ?? [] }.filter { !visited.contains($0) }
         }
         return isMember ? [] : nil
+    }
+
+    /// The type that a key path without its root (`\.name`) most likely starts from: the one
+    /// extension of a type of another module with a visible member `name` (as `theme` in
+    /// `extension EnvironmentValues`, which views also name their own `@Environment(\.theme) var
+    /// theme`), else the one type of the module with that member; nil when it is ambiguous.
+    func keyPathRoot(forMember name: String) -> String? {
+        guard let types = typesWithMember[name] else { return nil }
+        let extended = types.filter { !declaredTypes.contains($0) }
+        let candidates = extended.isEmpty ? types : extended
+        return candidates.count == 1 ? candidates.first : nil
     }
 }
 
@@ -624,10 +643,38 @@ final class ReferenceCollector: SyntaxVisitor {
         return .visitChildren
     }
 
+    override func visit(_ node: KeyPathExprSyntax) -> SyntaxVisitorContinueKind {
+        // The first property of a key path is a member of its root: `\Model.name`, or `\.name`
+        // with the root inferred. Later components are members of types not known here.
+        guard let first = node.components.first, first.period != nil,
+              case .property(let property) = first.component,
+              case .identifier = property.declName.baseName.tokenKind else {
+            return .visitChildren
+        }
+        let name = property.declName.baseName.identifierText
+        if let root = node.root {
+            // A generic parameter or local type as the root shadows the module's types.
+            if let components = root.qualifiedComponents, !isLocal(components[0]),
+               let type = resolveType(components), let files = symbols.member(name, of: type.name, use: .value) {
+                record(files, symbol: "\(type.name.split(separator: ".").last!).\(name)", at: property)
+            }
+        } else if let type = symbols.keyPathRoot(forMember: name), let files = symbols.member(name, of: type, use: .value) {
+            // Without the type of the root, only a name that is not ambiguous is resolved:
+            // `\.id` could be any identifiable type's.
+            record(files, symbol: "\(type.split(separator: ".").last!).\(name)", at: property)
+        }
+        return .visitChildren
+    }
+
     override func visit(_ node: DeclReferenceExprSyntax) -> SyntaxVisitorContinueKind {
         guard case .identifier = node.baseName.tokenKind else { return .visitChildren }
         // `value.name`: handled with the member access, if at all.
         if let access = node.parent?.as(MemberAccessExprSyntax.self), access.declName.id == node.id {
+            return .visitChildren
+        }
+        // `\Root.name.other`: members of the key path's root and of what follows, not names in
+        // scope here (see the key path).
+        if node.parent?.is(KeyPathPropertyComponentSyntax.self) == true {
             return .visitChildren
         }
         let name = node.baseName.identifierText

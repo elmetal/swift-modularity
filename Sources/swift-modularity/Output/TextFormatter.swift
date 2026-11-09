@@ -141,15 +141,17 @@ public struct TextFormatter: Sendable {
                     text += ", or move the \(candidate.requiredFiles.count) file\(candidate.requiredFiles.count == 1 ? "" : "s") it needs with it"
                 }
                 lines.append(text + ":")
-                for dependency in blocking.prefix(3) {
+                // A few by default, as each candidate is one line among many; all with --limit 0.
+                let shownBlocking = limit > 0 ? Array(blocking.prefix(3)) : blocking
+                for dependency in shownBlocking {
                     var line = "        \(dependency.from) → \(dependency.to)"
                     if let symbol = dependency.symbol, let number = dependency.line {
                         line += "  `\(symbol)` line \(number)"
                     }
                     lines.append(line + " (\(dependency.references) reference\(dependency.references == 1 ? "" : "s"))")
                 }
-                if blocking.count > 3 {
-                    lines.append("        … and \(blocking.count - 3) more")
+                if shownBlocking.count < blocking.count {
+                    lines.append("        … and \(blocking.count - shownBlocking.count) more (--limit 0 lists all)")
                 }
             }
         }

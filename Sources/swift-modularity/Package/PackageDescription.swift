@@ -110,14 +110,50 @@ public enum PackageLoader {
         process.standardOutput = output
         process.standardError = errors
         try process.run()
+        // Read both pipes at once: a process that fills one while the other is read would block.
+        let errorReader = PipeReader(errors.fileHandleForReading)
         let data = output.fileHandleForReading.readDataToEndOfFile()
-        let errorData = errors.fileHandleForReading.readDataToEndOfFile()
+        let errorData = errorReader.wait()
         process.waitUntilExit()
-        guard process.terminationStatus == 0 else {
-            let message = String(decoding: errorData, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
-            throw LoadError(description: "`swift package dump-package` failed: \(message)")
+        guard process.terminationReason == .exit, process.terminationStatus == 0 else {
+            throw LoadError(description: "`swift package dump-package` failed: "
+                            + failureReason(errors: errorData, output: data, process: process))
         }
         return try parseDumpPackage(data, packageDirectory: packageDirectory)
+    }
+
+    /// What `swift package dump-package` wrote about its failure: its standard error and its
+    /// standard output (where swiftly reports a `.swift-version` with no installed toolchain),
+    /// else how it ended.
+    static func failureReason(errors: Data, output: Data, process: Process) -> String {
+        let texts = [errors, output]
+            .map { String(decoding: $0, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        if !texts.isEmpty { return texts.joined(separator: "\n") }
+        switch process.terminationReason {
+        case .uncaughtSignal:
+            return "terminated by signal \(process.terminationStatus), with no output"
+        default:
+            return "exited with status \(process.terminationStatus), with no output"
+        }
+    }
+
+    /// Reads a pipe to its end on another thread.
+    private final class PipeReader: @unchecked Sendable {
+        private var data = Data()
+        private let done = DispatchSemaphore(value: 0)
+
+        init(_ handle: FileHandle) {
+            Thread.detachNewThread { [self] in
+                data = handle.readDataToEndOfFile()
+                done.signal()
+            }
+        }
+
+        func wait() -> Data {
+            done.wait()
+            return data
+        }
     }
 
     /// Parses the JSON written by `swift package dump-package`.
