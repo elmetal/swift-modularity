@@ -77,4 +77,16 @@ import Testing
         // Core VFI 3 (p, a, b), VFO 3 (a, b, q). x: VFI 3 (u1, u2, x), VFO 3 (x, v1, v2).
         #expect(analysis.groups[6] == .central)
     }
+
+    @Test func thresholdsOutOfRange() {
+        #expect(ArchitectureThresholds.paper.problem == nil)
+        #expect(ArchitectureThresholds(size: 1, sensitivity: 0, dominance: 0).problem == nil)
+        #expect(ArchitectureThresholds(size: 0, sensitivity: 0, dominance: 0.5).problem != nil)
+        #expect(ArchitectureThresholds(size: 1.5, sensitivity: 0.01, dominance: 0.5).problem != nil)
+        #expect(ArchitectureThresholds(size: 0.05, sensitivity: -0.01, dominance: 0.5).problem != nil)
+        // y must stay below x, or the borderline band would include an empty Core.
+        #expect(ArchitectureThresholds(size: 0.05, sensitivity: 0.05, dominance: 0.5).problem != nil)
+        #expect(ArchitectureThresholds(size: 0.05, sensitivity: 0.01, dominance: -1).problem != nil)
+        #expect(ArchitectureThresholds(size: .nan, sensitivity: 0.01, dominance: 0.5).problem != nil)
+    }
 }

@@ -3,6 +3,7 @@ import PackagePlugin
 
 /// `swift package modularity [--target <name>]... [options]`
 /// `swift package modularity diff [<revisions>] [options]`
+/// `swift package modularity files <paths>... [options]`
 ///
 /// Describes the package's targets and their dependencies as JSON (SwiftPM's plugin API knows
 /// them without running `swift package dump-package`, which a plugin cannot do while SwiftPM holds
@@ -54,7 +55,8 @@ struct ModularityPlugin: CommandPlugin {
         let tool = try context.tool(named: "swift-modularity-cli")
         let process = Process()
         process.executableURL = tool.url
-        if arguments.first == "diff" {
+        switch arguments.first {
+        case "diff":
             var diffArguments = ["diff"]
             // The description is of this package as it is on disk; paths after -- or another
             // package directory are analyzed by the tool itself.
@@ -62,7 +64,12 @@ struct ModularityPlugin: CommandPlugin {
                 diffArguments += ["--package-description", descriptionURL.path]
             }
             process.arguments = diffArguments + arguments.dropFirst()
-        } else {
+        case "files":
+            // Directories of the package, relative to it, as one module: no description needed.
+            process.arguments = arguments
+        case "package":
+            process.arguments = ["package", "--package-description", descriptionURL.path] + arguments.dropFirst()
+        default:
             process.arguments = ["package", "--package-description", descriptionURL.path] + arguments
         }
         // Tells the tool that it runs in the plugin's sandbox (see `DiffCommand`).

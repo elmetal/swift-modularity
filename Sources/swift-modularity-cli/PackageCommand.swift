@@ -22,7 +22,7 @@ struct PackageCommand: AsyncParsableCommand {
     @OptionGroup var options: CommonOptions
 
     func run() async throws {
-        let config = options.resolvedConfig()
+        let config = try options.resolvedConfig()
         let package: PackageDescription
         do {
             if let packageDescription {

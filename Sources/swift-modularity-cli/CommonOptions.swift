@@ -19,7 +19,7 @@ struct CommonOptions: ParsableArguments {
 
     @OptionGroup var analysis: AnalysisOptions
 
-    func resolvedConfig() -> ModularityConfig { analysis.resolvedConfig() }
+    func resolvedConfig() throws -> ModularityConfig { try analysis.resolvedConfig() }
 
     /// Writes the report.
     func emit(_ report: ModularityReport, config: ModularityConfig) throws {
@@ -65,7 +65,20 @@ struct AnalysisOptions: ParsableArguments {
     }
 
     /// The command-line options over the nearest `modularity.toml`.
-    func resolvedConfig() -> ModularityConfig {
+    ///
+    /// - Throws: A `ValidationError` when the resulting thresholds or limit are out of range.
+    func resolvedConfig() throws -> ModularityConfig {
+        let config = mergedConfig()
+        if let problem = config.thresholds.problem {
+            throw ValidationError(problem)
+        }
+        if let limit = config.limit, limit < 0 {
+            throw ValidationError("The limit must be 0 or more (got \(limit)).")
+        }
+        return config
+    }
+
+    private func mergedConfig() -> ModularityConfig {
         var commandLine = ModularityConfig()
         commandLine.exclude = exclude
         commandLine.sizeThreshold = sizeThreshold
@@ -116,7 +129,16 @@ func terminated(_ text: String) -> String {
 /// Writes `text` to the file at `path`, or to standard output.
 func write(_ text: String, to path: String?) throws {
     if let path {
-        try text.write(toFile: path, atomically: true, encoding: .utf8)
+        do {
+            try text.write(toFile: path, atomically: true, encoding: .utf8)
+        } catch {
+            printDiagnostic("error: could not write \(path): \(error.localizedDescription)")
+            if ProcessInfo.processInfo.environment[DiffCommand.pluginEnvironmentKey] != nil {
+                // SwiftPM's sandbox lets a command plugin write only in its own directory.
+                printDiagnostic("note: the command plugin cannot write into the package; redirect the output instead (swift package modularity > report.txt), or run swift package --disable-sandbox modularity")
+            }
+            throw ExitCode.failure
+        }
     } else {
         FileHandle.standardOutput.write(Data(text.utf8))
     }
