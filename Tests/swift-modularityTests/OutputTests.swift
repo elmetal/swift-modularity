@@ -88,4 +88,24 @@ import Testing
         #expect(all.contains("Dir/A.swift → O4.swift"))
         #expect(!all.contains("… and"))
     }
+
+    @Test func groupSplitText() {
+        // Dir/ and the rest use each other: one cycle of 4 files, a ⇄ b inside, o1 ⇄ o2 outside.
+        let graph = DependencyGraph(
+            names: ["Dir/a.swift", "Dir/b.swift", "o1.swift", "o2.swift"],
+            dependencies: [("Dir/a.swift", "Dir/b.swift"), ("Dir/b.swift", "Dir/a.swift"), ("o1.swift", "o2.swift"),
+                           ("o2.swift", "o1.swift"), ("Dir/a.swift", "o1.swift"), ("o2.swift", "Dir/b.swift")]
+        )
+        let report = ModularityReport(modules: [ModuleReport(name: "App", level: .file, directory: nil, analysis: ModularityAnalysis(graph: graph))])
+        let text = TextFormatter().format(report)
+        #expect(text.contains("Removing them all splits cyclic group 1 (4 files): largest group left 2 files (2 + 2)"))
+        #expect(report.modules[0].extractionCandidates[0].splitGroups == [.init(group: 1, size: 4, remainingGroups: [2, 2])])
+    }
+
+    @Test func blockedWithoutACycleAcrossTheBoundary() {
+        let graph = DependencyGraph(names: ["Dir/a.swift", "Dir/b.swift", "o.swift", "p.swift"],
+                                    dependencies: [("Dir/a.swift", "o.swift"), ("p.swift", "Dir/b.swift")])
+        let report = ModularityReport(modules: [ModuleReport(name: "App", level: .file, directory: nil, analysis: ModularityAnalysis(graph: graph))])
+        #expect(TextFormatter().format(report).contains("No cycle crosses its boundary."))
+    }
 }

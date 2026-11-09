@@ -25,6 +25,22 @@ public struct ExtractionCandidate: Sendable, Equatable {
     /// Files outside the directory that its files depend on, directly or indirectly: what would
     /// have to move with it to make a lower target.
     public var requiredFiles: [Int]
+    /// The cyclic groups with members both inside and outside the directory, and what is left of
+    /// each when the dependencies blocking it are removed together. Either direction leaves the
+    /// same groups: with dependencies crossing the boundary one way only, no cycle crosses it, so
+    /// each group splits into the cycles among its members inside and among its members outside.
+    /// Empty when the directory is not blocked, or no cycle crosses its boundary.
+    public var splitGroups: [GroupSplit]
+
+    /// A cyclic group that a directory's boundary cuts through.
+    public struct GroupSplit: Sendable, Equatable {
+        /// The index of the group in `ModularityAnalysis.cyclicGroups`.
+        public var group: Int
+        public var groupSize: Int
+        /// The sizes of the cyclic groups left among the group's members, largest first (empty
+        /// when no cycle is left).
+        public var remainingGroupSizes: [Int]
+    }
 
     public var canBeLowerTarget: Bool { outgoing.isEmpty }
     public var canBeUpperTarget: Bool { incoming.isEmpty }
@@ -53,8 +69,14 @@ public enum Extraction {
             let required = (0..<graph.count).filter { other in
                 !members.contains(other) && files.contains { analysis.visibility.contains(row: $0, column: other) }
             }
+            // Only a blocked directory can have a cycle across its boundary.
+            let splits = outgoing.isEmpty || incoming.isEmpty ? [] : analysis.cyclicGroups.enumerated().compactMap { index, group -> ExtractionCandidate.GroupSplit? in
+                guard group.contains(where: members.contains), !group.allSatisfy(members.contains) else { return nil }
+                let remaining = CycleBreaking.remainingGroupSizes(in: graph, group: group, removing: outgoing)
+                return .init(group: index, groupSize: group.count, remainingGroupSizes: remaining)
+            }
             return ExtractionCandidate(directory: directory, files: files.sorted(), outgoing: outgoing,
-                                       incoming: incoming, requiredFiles: required)
+                                       incoming: incoming, requiredFiles: required, splitGroups: splits)
         }
         return candidates.sorted { a, b in
             if a.isBlocked != b.isBlocked { return !a.isBlocked }

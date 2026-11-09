@@ -153,6 +153,13 @@ public struct TextFormatter: Sendable {
                 if shownBlocking.count < blocking.count {
                     lines.append("        … and \(blocking.count - shownBlocking.count) more (--limit 0 lists all)")
                 }
+                if candidate.splitGroups.isEmpty {
+                    lines.append("        No cycle crosses its boundary.")
+                }
+                for split in candidate.splitGroups {
+                    lines.append("        Removing them all splits cyclic group \(split.group) (\(split.size) \(module.elementNoun)): "
+                                 + Self.remaining(split.remainingGroups, noun: module.elementNoun))
+                }
             }
         }
         if shown.count < module.extractionCandidates.count {
