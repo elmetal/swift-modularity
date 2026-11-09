@@ -116,7 +116,16 @@ func terminated(_ text: String) -> String {
 /// Writes `text` to the file at `path`, or to standard output.
 func write(_ text: String, to path: String?) throws {
     if let path {
-        try text.write(toFile: path, atomically: true, encoding: .utf8)
+        do {
+            try text.write(toFile: path, atomically: true, encoding: .utf8)
+        } catch {
+            printDiagnostic("error: could not write \(path): \(error.localizedDescription)")
+            if ProcessInfo.processInfo.environment[DiffCommand.pluginEnvironmentKey] != nil {
+                // SwiftPM's sandbox lets a command plugin write only in its own directory.
+                printDiagnostic("note: the command plugin cannot write into the package; redirect the output instead (swift package modularity > report.txt), or run swift package --disable-sandbox modularity")
+            }
+            throw ExitCode.failure
+        }
     } else {
         FileHandle.standardOutput.write(Data(text.utf8))
     }

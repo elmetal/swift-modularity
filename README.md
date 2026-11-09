@@ -30,6 +30,15 @@ dependencies: [
 ],
 ```
 
+It takes the options of `package`, and `swift package modularity diff …` and
+`swift package modularity files <paths>` run the other commands. The plugin runs in SwiftPM's
+sandbox, which does not let it write into the package, so redirect the output rather than use
+`--output`:
+
+```bash
+swift package modularity --format json > modularity.json
+```
+
 ## Usage
 
 ```bash
