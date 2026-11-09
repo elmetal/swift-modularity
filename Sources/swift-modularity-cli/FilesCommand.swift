@@ -34,7 +34,7 @@ struct FilesCommand: AsyncParsableCommand {
     }
 
     func run() async throws {
-        let config = options.resolvedConfig()
+        let config = try options.resolvedConfig()
         guard let module = try await Analyze.files(paths, name: name, currentDirectory: FileManager.default.currentDirectoryPath,
                                                    config: config) else { return }
         try options.emit(ModularityReport(modules: [module]), config: config)

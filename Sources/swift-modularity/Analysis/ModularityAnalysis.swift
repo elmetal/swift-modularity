@@ -18,6 +18,21 @@ public struct ArchitectureThresholds: Sendable, Equatable, Codable {
         self.sensitivity = sensitivity
         self.dominance = dominance
     }
+
+    /// Why the thresholds cannot classify a system, or nil when they can: x must be a share of
+    /// the system (0 < x ≤ 1), y a margin smaller than x (0 ≤ y < x), and z not negative.
+    public var problem: String? {
+        if !size.isFinite || size <= 0 || size > 1 {
+            return "The size threshold must be more than 0 and at most 1 (got \(size))."
+        }
+        if !sensitivity.isFinite || sensitivity < 0 || sensitivity >= size {
+            return "The sensitivity threshold must be at least 0 and less than the size threshold \(size) (got \(sensitivity))."
+        }
+        if !dominance.isFinite || dominance < 0 {
+            return "The dominance threshold must be 0 or more (got \(dominance))."
+        }
+        return nil
+    }
 }
 
 /// The architecture of a system, by the size of its largest cyclic group.

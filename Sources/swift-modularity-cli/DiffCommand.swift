@@ -66,7 +66,7 @@ struct DiffCommand: AsyncParsableCommand {
     }
 
     func run() async throws {
-        let config = analysis.resolvedConfig()
+        let config = try analysis.resolvedConfig()
         let range = try RevisionRange.parse(revisions)
         let currentDirectory = URL(fileURLWithPath: FileManager.default.currentDirectoryPath).resolvingSymlinksInPath().path
 
