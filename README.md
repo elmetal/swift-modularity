@@ -9,7 +9,9 @@ remove to split a cycle, and which directories could become a target of their ow
 
 ## Installation
 
-Requires Swift 6.1 or later, on macOS 13 or later or Linux.
+Requires Swift 6.1 or later, on macOS 13 or later or Linux. The package provides the command-line
+tool and a command plugin, not a library: to use the results in other tools, read the JSON output
+(`--format json`).
 
 ### Command-line tool
 ```bash
