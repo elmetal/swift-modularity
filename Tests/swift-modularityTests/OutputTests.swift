@@ -35,6 +35,7 @@ import Testing
         #expect(try JSONDecoder().decode(ModularityReport.self, from: data) == report)
         let json = String(decoding: data, as: UTF8.self)
         #expect(json.contains("\"architecture\":\"core-periphery\""))
+        #expect(json.contains("\"schemaVersion\":1"))
     }
 
     @Test func xcodeNotesAtTheBestSplittingDependencies() {

@@ -2,9 +2,17 @@
 
 /// The results of analyzing one or more modules: what the JSON output contains.
 public struct ModularityReport: Sendable, Codable, Equatable {
+    /// The version of the JSON output of every command (`files`, `package` and `diff`). It is
+    /// raised when a field is removed or renamed, or changes meaning or type; adding a field
+    /// does not raise it.
+    public static let currentSchemaVersion = 1
+
+    /// The `currentSchemaVersion` of the tool that wrote the report.
+    public var schemaVersion: Int
     public var modules: [ModuleReport]
 
     public init(modules: [ModuleReport]) {
+        self.schemaVersion = Self.currentSchemaVersion
         self.modules = modules
     }
 }

@@ -286,6 +286,11 @@ suits a pull request: the cycles that were already there are not repeated on eve
 To follow the measures over time, compare any two revisions, such as two release tags
 (`diff v1.0..v2.0`); `--format json` gives the same comparison for other tools.
 
+### JSON output
+`--format json` writes a top-level `schemaVersion` (currently 1), the same for `files`, `package`
+and `diff`. It is raised when a field is removed or renamed, or changes meaning or type; new
+fields can appear without raising it, so ignore the fields you do not know.
+
 ### AI assistants
 The text output gives cycles with `file:line` references and the role of every file, which an AI
 assistant can read directly. For [Claude Code](https://claude.com/claude-code), copy

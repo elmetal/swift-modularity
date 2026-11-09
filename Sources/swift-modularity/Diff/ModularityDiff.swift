@@ -20,11 +20,15 @@ public struct ModularityDiff: Sendable, Codable, Equatable {
         }
     }
 
+    /// The version of the JSON output: `ModularityReport.currentSchemaVersion`, shared by every
+    /// command.
+    public var schemaVersion: Int
     public var base: Side
     public var head: Side
     public var modules: [ModuleDiff]
 
     public init(base: Side, head: Side, modules: [ModuleDiff]) {
+        self.schemaVersion = ModularityReport.currentSchemaVersion
         self.base = base
         self.head = head
         self.modules = modules

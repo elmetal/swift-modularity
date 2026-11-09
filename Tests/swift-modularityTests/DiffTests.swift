@@ -132,6 +132,7 @@ import Testing
         let value = diff(acyclic, cyclic)
         let data = try JSONEncoder().encode(value)
         #expect(try JSONDecoder().decode(ModularityDiff.self, from: data) == value)
+        #expect(String(decoding: data, as: UTF8.self).contains("\"schemaVersion\":1"))
     }
 }
 
