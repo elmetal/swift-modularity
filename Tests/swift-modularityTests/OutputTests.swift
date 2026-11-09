@@ -29,6 +29,33 @@ import Testing
         #expect(text.contains("    3 cont |x.#| C.swift"))
     }
 
+    @Test func noDependenciesPrintsNoPartition() throws {
+        let graph = FileDependencyGraphBuilder().build(sources: [
+            (name: "A.swift", source: "struct A {}"),
+            (name: "B.swift", source: "struct B {}"),
+        ])
+        let report = ModularityReport(modules: [
+            ModuleReport(name: "App", level: .file, directory: nil, analysis: ModularityAnalysis(graph: graph)),
+        ])
+        let text = TextFormatter(showMatrix: true).format(report)
+        #expect(text.contains("  Partition: none (no dependencies between files)"))
+        #expect(!text.contains("Partition (median view)"))
+        #expect(!text.contains("Central"))
+        // The elements are listed without group headings, and the DSM without group labels.
+        #expect(text.contains("\n    A.swift  VFI 1  VFO 1\n"))
+        #expect(text.contains("    1      |# | A.swift"))
+        let json = String(decoding: try JSONEncoder().encode(report), as: UTF8.self)
+        #expect(json.contains("\"isPartitioned\":false"))
+        #expect(json.contains("\"schemaVersion\":1"))
+    }
+
+    @Test func partitionedReportsSaySo() throws {
+        let text = TextFormatter().format(cycleReport())
+        #expect(text.contains("Partition (core-periphery view): Core 2, Control 1"))
+        let json = String(decoding: try JSONEncoder().encode(cycleReport()), as: UTF8.self)
+        #expect(json.contains("\"isPartitioned\":true"))
+    }
+
     @Test func jsonRoundTrips() throws {
         let report = cycleReport()
         let data = try JSONEncoder().encode(report)

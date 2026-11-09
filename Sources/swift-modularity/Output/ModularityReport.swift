@@ -92,6 +92,9 @@ public struct ModuleReport: Sendable, Codable, Equatable {
     public var propagationCost: Double
     public var architecture: ArchitectureType
     public var view: PartitionView
+    /// False when no element depends on another: every element's `group` is then `central`,
+    /// which tells nothing about it (see `ModularityAnalysis.isPartitioned`).
+    public var isPartitioned: Bool
     public var largestCyclicGroupSize: Int
     public var largestCyclicGroupRatio: Double
     public var medianFanIn: Double
@@ -122,6 +125,7 @@ public struct ModuleReport: Sendable, Codable, Equatable {
         self.propagationCost = analysis.propagationCost
         self.architecture = analysis.architecture
         self.view = analysis.view
+        self.isPartitioned = analysis.isPartitioned
         self.largestCyclicGroupSize = analysis.largestCyclicGroupSize
         self.largestCyclicGroupRatio = analysis.largestCyclicGroupRatio
         self.medianFanIn = analysis.medianFanIn

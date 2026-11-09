@@ -45,6 +45,13 @@ reach the Core's. That is only possible for elements unrelated to the Core (an e
 depends on the Core has a lower VFI than the Core; one the Core depends on has a lower VFO), and
 this tool labels them Central.
 
+Both steps put an element equal to the threshold on the high side (≥). When a median is 1, its
+minimum (every element counts itself), every element is high on that axis, so the median view has
+no Peripheral-M or Control-M (median VFI 1) or no Shared-M or Peripheral-M (median VFO 1). That
+follows the paper and is kept. When no element depends on another, both medians are 1 and every
+element is Central; `ModularityAnalysis.isPartitioned` is then false, the text output prints
+`Partition: none`, and the JSON keeps each element's `group` with `isPartitioned: false`.
+
 The reordered DSM (step 12) lists the groups in the order Shared, Core (or Central), Peripheral,
 Control, each sorted by VFI descending, then VFO ascending (then name, for a stable order).
 

@@ -101,7 +101,11 @@ for the exact definitions and how each is computed.
   *Peripheral* (little in either direction) or *Control* (depends on much, depended on little), by
   comparing its VFI and VFO with the Core's. Hierarchical and multi-core systems are partitioned
   by the median VFI and VFO instead (*Shared-M*, *Central*, *Peripheral-M*, *Control-M*), as the
-  paper does.
+  paper does. As in the paper, a value equal to the Core's or the median counts as high. A module
+  whose elements do not depend on each other has no partition (`Partition: none`, and
+  `isPartitioned: false` in JSON). When most elements are unrelated to the rest, a median can
+  be 1, its minimum, and then every element is high on that axis: no *Peripheral-M* or
+  *Control-M* when the median VFI is 1, no *Shared-M* or *Peripheral-M* when the median VFO is 1.
 
 ### Reading the results
 

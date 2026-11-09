@@ -93,7 +93,11 @@ public struct ModularityAnalysis: Sendable {
     public let cyclicGroups: [[Int]]
     public let architecture: ArchitectureType
     public let view: PartitionView
-    /// The group of each element.
+    /// Whether the partition says anything: false when no element depends on another. Then every
+    /// VFI and VFO is 1, both medians are 1, and every element lands in the high group (Central)
+    /// of the median view, which `groups` still holds but which tells nothing about any element.
+    public let isPartitioned: Bool
+    /// The group of each element. Meaningless when `isPartitioned` is false.
     public let groups: [ComponentGroup]
     /// The elements in the order of the reordered DSM (group order, then VFI descending, VFO
     /// ascending, name).
@@ -160,6 +164,7 @@ public struct ModularityAnalysis: Sendable {
         })
         self.architecture = architecture
         self.view = view
+        self.isPartitioned = !graph.edges.isEmpty
         self.groups = groups
         self.medianFanIn = medianFanIn
         self.medianFanOut = medianFanOut
@@ -201,7 +206,11 @@ public struct ModularityAnalysis: Sendable {
         return .corePeriphery
     }
 
-    /// Steps 10 and 11 of Appendix A, for one element.
+    /// Steps 10 and 11 of Appendix A, for one element. As in the paper, an element at the
+    /// threshold is on the high side (VFI ≥ threshold, VFO ≥ threshold). So when a median is 1,
+    /// its minimum (as when most elements are unrelated to the rest), every element is on the
+    /// high side of that axis: with median VFI 1 there is no Peripheral-M or Control-M, and with
+    /// median VFO 1 no Shared-M or Peripheral-M.
     static func group(fanIn: Int, fanOut: Int, fanInThreshold: Double, fanOutThreshold: Double, high: ComponentGroup) -> ComponentGroup {
         switch (Double(fanIn) >= fanInThreshold, Double(fanOut) >= fanOutThreshold) {
         case (true, false): return .shared
