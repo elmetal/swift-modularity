@@ -15,7 +15,7 @@ tool and a command plugin, not a library: to use the results in other tools, rea
 
 ### Command-line tool
 ```bash
-git clone https://github.com/elmetal/swift-modularity.git
+git clone --branch 0.0.1 https://github.com/elmetal/swift-modularity.git
 cd swift-modularity
 swift build -c release
 cp .build/release/swift-modularity-cli /usr/local/bin/
@@ -26,7 +26,7 @@ Add the package as a dependency and run `swift package modularity`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/elmetal/swift-modularity.git", branch: "main"),
+    .package(url: "https://github.com/elmetal/swift-modularity.git", from: "0.0.1"),
 ],
 ```
 
@@ -185,7 +185,9 @@ new, grew, shrank or are no longer cycles. The revisions are written as in `git 
 Both sides are analyzed on the spot, with the same version of the tool and the same
 `modularity.toml`, so no report has to be kept between runs, and a change to the tool never makes
 the two sides incomparable. A revision is exported into a temporary directory; nothing in the
-repository is written. Without paths, the package in `--package-path` is analyzed as `package`
+repository is written. The export holds the files of the repository itself: the files of git
+submodules are not in it, so on the committed side they are missing (and appear added when the
+other side is the working tree). Without paths, the package in `--package-path` is analyzed as `package`
 does; after `--`, the paths are analyzed as one module, as `files` does.
 
 The command plugin runs it too, in its sandbox and without extra permissions:
