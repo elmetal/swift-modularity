@@ -138,7 +138,12 @@ struct DiffCommand: AsyncParsableCommand {
     private func analyze(root: String, relative: String, config: ModularityConfig, side: ModularityDiff.Side) async throws -> ModularityReport {
         let directory = relative.isEmpty ? root : root + "/" + relative
         if !paths.isEmpty {
-            let module = try await Analyze.files(paths, name: name, currentDirectory: directory, config: config, skipMissing: true)
+            // The default name comes from the working tree's paths: in an export, `.` would be
+            // named after the temporary directory, and the two sides would not match.
+            let workingTreeName = URL(fileURLWithPath: paths[0], relativeTo: URL(fileURLWithPath: FileManager.default.currentDirectoryPath))
+                .standardizedFileURL.lastPathComponent
+            let module = try await Analyze.files(paths, name: name ?? workingTreeName, currentDirectory: directory,
+                                                 config: config, skipMissing: true)
             return ModularityReport(modules: module.map { [$0] } ?? [])
         }
         let package: PackageDescription
