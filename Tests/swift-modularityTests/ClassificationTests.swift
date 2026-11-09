@@ -62,6 +62,41 @@ import Testing
         #expect(analysis.groups == [.control, .control, .control, .shared, .central, .shared])
     }
 
+    @Test func noDependenciesMeansNoPartition() {
+        let graph = DependencyGraph(names: ["a", "b", "c"], dependencies: [])
+        let analysis = ModularityAnalysis(graph: graph)
+        #expect(analysis.architecture == .hierarchical)
+        #expect(!analysis.isPartitioned)
+        // Every VFI and VFO is 1, so both medians are 1 and the comparisons put every element in
+        // Central; `groups` keeps that, but the report says there is no partition.
+        #expect(analysis.medianFanIn == 1)
+        #expect(analysis.medianFanOut == 1)
+        #expect(analysis.groups == [.central, .central, .central])
+    }
+
+    @Test func aMedianAtItsMinimumPutsEveryElementOnItsHighSide() {
+        // a, b, c and d use x. VFI: x 5, the rest 1 → median 1. VFO: x 1, the rest 2 → median 2.
+        // VFI ≥ 1 for every element, as in Appendix A (≥ the median is the high side), so there
+        // is no Peripheral-M or Control-M.
+        let graph = DependencyGraph(
+            names: ["a", "b", "c", "d", "x"],
+            dependencies: [("a", "x"), ("b", "x"), ("c", "x"), ("d", "x")]
+        )
+        let analysis = ModularityAnalysis(graph: graph)
+        #expect(analysis.isPartitioned)
+        #expect(analysis.medianFanIn == 1)
+        #expect(analysis.medianFanOut == 2)
+        #expect(analysis.groups == [.central, .central, .central, .central, .shared])
+    }
+
+    @Test func bothMediansAtTheirMinimumPutEveryElementInCentral() {
+        // One dependency among five elements: both medians are 1.
+        let graph = DependencyGraph(names: ["a", "b", "c", "d", "e"], dependencies: [("a", "b")])
+        let analysis = ModularityAnalysis(graph: graph)
+        #expect(analysis.isPartitioned)
+        #expect(analysis.groups == Array(repeating: .central, count: 5))
+    }
+
     @Test func elementsUnrelatedToTheCoreReachingItsFansAreCentral() {
         // Core {a, b} (2 of 49 elements: borderline). x, unrelated to the Core, is on a chain
         // where it depends on 3 elements and is depended on by 3, like the Core.

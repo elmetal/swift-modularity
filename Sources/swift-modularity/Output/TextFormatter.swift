@@ -47,7 +47,9 @@ public struct TextFormatter: Sendable {
             let count = module.elements.filter { $0.group == group }.count
             return count == 0 ? nil : "\(Self.title(of: group, view: module.view)) \(count)"
         }
-        if !counts.isEmpty {
+        if !module.isPartitioned, module.elementCount > 0 {
+            lines.append("  Partition: none (no dependencies between \(module.elementNoun))")
+        } else if !counts.isEmpty {
             lines.append("  Partition (\(module.view.rawValue) view): " + counts.joined(separator: ", "))
         }
 
@@ -86,18 +88,26 @@ public struct TextFormatter: Sendable {
             lines.append("")
             lines.append("  Elements (VFI: depended on by, VFO: depends on; both count the element itself):")
             let width = min(module.elements.map(\.name.count).max() ?? 0, 60)
-            for group in ComponentGroup.dsmOrder {
-                let members = module.elements.filter { $0.group == group }
-                guard !members.isEmpty else { continue }
-                lines.append("    \(Self.title(of: group, view: module.view)) (\(members.count)) — \(Self.explanation(of: group, view: module.view))")
+            func list(_ members: [ModuleReport.Element], indent: String) {
                 let shown = limit > 0 ? Array(members.prefix(limit)) : members
                 for element in shown {
                     let name = element.name.padding(toLength: max(width, element.name.count), withPad: " ", startingAt: 0)
-                    lines.append("      \(name)  VFI \(element.fanIn)  VFO \(element.fanOut)")
+                    lines.append("\(indent)\(name)  VFI \(element.fanIn)  VFO \(element.fanOut)")
                 }
                 if shown.count < members.count {
-                    lines.append("      … and \(members.count - shown.count) more (--limit 0 lists all)")
+                    lines.append("\(indent)… and \(members.count - shown.count) more (--limit 0 lists all)")
                 }
+            }
+            if module.isPartitioned {
+                for group in ComponentGroup.dsmOrder {
+                    let members = module.elements.filter { $0.group == group }
+                    guard !members.isEmpty else { continue }
+                    lines.append("    \(Self.title(of: group, view: module.view)) (\(members.count)) — \(Self.explanation(of: group, view: module.view))")
+                    list(members, indent: "      ")
+                }
+            } else {
+                // No groups: every element only counts itself.
+                list(module.elements, indent: "    ")
             }
         }
 
@@ -198,7 +208,7 @@ public struct TextFormatter: Sendable {
                 return visibility.contains(row: row, column: column) ? "." : " "
             }.joined()
             let number = String(row + 1).leftPadded(to: width)
-            let group = module.elements[row].group.rawValue.prefix(4)
+            let group = module.isPartitioned ? module.elements[row].group.rawValue.prefix(4) : "    "
             lines.append("    \(number) \(group) |\(cells)| \(name)")
         }
         return lines
