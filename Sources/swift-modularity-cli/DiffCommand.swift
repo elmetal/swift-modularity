@@ -99,6 +99,14 @@ struct DiffCommand: AsyncParsableCommand {
                 printDiagnostic("error: none of \(paths.joined(separator: ", ")) exists in \(baseSide.name) or \(headSide.name)")
                 throw ExitCode(64)
             }
+            // A target named with --target may be in one side only (added or removed since), but
+            // one that is in neither is a mistake, not a target without changes.
+            let targets = Set((baseReport.modules + headReport.modules).filter { $0.level == .target }
+                .flatMap { $0.elements.map(\.name) })
+            if let unknown = targetOptions.targets.first(where: { !targets.contains($0) }), paths.isEmpty {
+                printDiagnostic("error: neither \(baseSide.name) nor \(headSide.name) has a target named '\(unknown)'")
+                throw ExitCode(64)
+            }
             diff = ModularityDiff(base: baseReport, head: headReport, baseSide: baseSide, headSide: headSide)
         } catch let error as Git.GitError {
             printDiagnostic("error: \(error)")
