@@ -153,7 +153,9 @@ struct DiffCommand: AsyncParsableCommand {
             let data = try Data(contentsOf: URL(fileURLWithPath: packageDescription))
             package = try JSONDecoder().decode(PackageDescription.self, from: data)
         } else {
-            let packageDirectory = URL(fileURLWithPath: targetOptions.packagePath, relativeTo: URL(fileURLWithPath: directory))
+            // `isDirectory`: a directory that this side does not have would be taken for a file,
+            // and the path resolved against its parent.
+            let packageDirectory = URL(fileURLWithPath: targetOptions.packagePath, relativeTo: URL(fileURLWithPath: directory, isDirectory: true))
                 .standardizedFileURL.path
             guard FileManager.default.fileExists(atPath: packageDirectory + "/Package.swift") else {
                 throw PackageLoader.LoadError(description: "\(side.name) has no Package.swift in \(targetOptions.packagePath)")

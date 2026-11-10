@@ -12,7 +12,9 @@ enum Analyze {
     ///     base); nil when none exists.
     static func files(_ paths: [String], name: String?, currentDirectory: String, config: ModularityConfig,
                       skipMissing: Bool = false) async throws -> ModuleReport? {
-        let current = URL(fileURLWithPath: currentDirectory)
+        // `isDirectory`: in `diff`, a current directory that the revision does not have would be
+        // taken for a file, and the paths resolved against its parent.
+        let current = URL(fileURLWithPath: currentDirectory, isDirectory: true)
         let resolved = paths.map { URL(fileURLWithPath: $0, relativeTo: current).standardizedFileURL.path }
         let existing = skipMissing ? resolved.filter { FileManager.default.fileExists(atPath: $0) } : resolved
         guard let first = resolved.first, !existing.isEmpty else { return nil }
