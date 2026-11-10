@@ -45,8 +45,9 @@ rather than on cycles that were already there.
   it between targets of similar size or over time; a module of n files is at least 1/n.
 - **Architecture**: core-periphery (one large cyclic group, the Core), borderline, multi-core
   (several large cyclic groups) or hierarchical (no large cycles).
-- **Cyclic groups**: files that all depend on each other. Each dependency inside a group is listed
-  with the first reference that creates it (`file → file  \`Symbol\` line N`).
+- **Cyclic groups**: files that all depend on each other. The dependencies whose removal splits a
+  group are listed with the first reference that creates each (`file → file  \`Symbol\` line N`);
+  `--format json` has every dependency inside a group.
 - **Groups**: Shared (foundation), Core / Central, Peripheral, Control (top-level code).
 
 The file graph comes from syntax only. Members reached through a value (`x.helper()`) or an

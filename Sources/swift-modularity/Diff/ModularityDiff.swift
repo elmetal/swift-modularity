@@ -9,7 +9,8 @@ import Foundation
 public struct ModularityDiff: Sendable, Codable, Equatable {
     /// One side of the comparison.
     public struct Side: Sendable, Codable, Equatable {
-        /// How the side was given: "origin/main...HEAD", "v1.0", "working tree".
+        /// What the side is, as shown in the output: "the merge base of origin/main and HEAD",
+        /// "v1.0", "the working tree".
         public var name: String
         /// The commit analyzed, or nil for the working tree.
         public var commit: String?

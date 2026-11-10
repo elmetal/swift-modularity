@@ -154,8 +154,8 @@ extension DiagnosticFormatter {
     }
 
     /// "the new dependency on Parser.swift (`Parser`, 1 reference) closes cyclic group 2 of 3 files
-    /// in App, which is new since main...HEAD: removing it splits the group, no cycle left
-    /// [swift-modularity]"
+    /// in App, which is new since the merge base of main and HEAD: removing it splits the group,
+    /// no cycle left [swift-modularity]"
     static func message(for new: ModuleDiff.NewDependency, change: ModuleDiff.CyclicGroupChange, module: ModuleDiff, base: ModularityDiff.Side) -> String {
         let dependency = new.dependency
         var text = "the new dependency on \(dependency.to) ("

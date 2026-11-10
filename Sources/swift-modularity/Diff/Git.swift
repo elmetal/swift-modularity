@@ -72,7 +72,7 @@ public struct Git: Sendable {
     }
 
     /// The branch that a range without a base is compared with: `origin/HEAD`, else a local
-    /// `main` or `master`.
+    /// `main` or `master`, else `origin/main` or `origin/master`.
     public func defaultBranch() throws -> String {
         if let remote = try? run(["symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"]), !remote.isEmpty {
             return remote
