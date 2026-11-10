@@ -133,7 +133,7 @@ func write(_ text: String, to path: String?) throws {
             try text.write(toFile: path, atomically: true, encoding: .utf8)
         } catch {
             printDiagnostic("error: could not write \(path): \(error.localizedDescription)")
-            if ProcessInfo.processInfo.environment[DiffCommand.pluginEnvironmentKey] != nil {
+            if runsInPluginSandbox {
                 // SwiftPM's sandbox lets a command plugin write only in its own directory.
                 printDiagnostic("note: the command plugin cannot write into the package; redirect the output instead (swift package modularity > report.txt), or run swift package --disable-sandbox modularity")
             }
@@ -142,6 +142,12 @@ func write(_ text: String, to path: String?) throws {
     } else {
         FileHandle.standardOutput.write(Data(text.utf8))
     }
+}
+
+/// Whether the command plugin started the tool, in its sandbox: it sets `SWIFT_MODULARITY_PLUGIN`
+/// (see `ModularityPlugin`).
+var runsInPluginSandbox: Bool {
+    ProcessInfo.processInfo.environment["SWIFT_MODULARITY_PLUGIN"] != nil
 }
 
 /// Writes a line to standard error, which is kept for diagnostics so that results can be piped.
