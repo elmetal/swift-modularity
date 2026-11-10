@@ -131,8 +131,8 @@ lists are applied to the files found; the plugin lists the files SwiftPM gives i
 2. `SymbolTable` merges the files: only declarations other files can see are entered, and the
    names in inheritance clauses are resolved to the module's protocols and superclasses.
 3. `ReferenceCollector` walks each file with a stack of enclosing types and a stack of local scopes
-   (parameters, generic parameters, pattern bindings, closure parameters, implicit `newValue`,
-   `oldValue` and `error`). A type name `X` inside `A.B` resolves to `A.B.X`, `A.X` or `X`, the
+   (parameters, generic parameters, pattern bindings, functions and types declared in a body,
+   closure parameters, implicit `newValue`, `oldValue` and `error`). A type name `X` inside `A.B` resolves to `A.B.X`, `A.X` or `X`, the
    first that exists (the file's own declarations first). An unqualified value name that is not
    local is looked up as a member of the enclosing types, innermost first, then as a type, then as
    a top-level value. `self.m` and `Self.m` look up `m` in the innermost type; `A.B.m` resolves the
