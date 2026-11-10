@@ -27,8 +27,8 @@ public struct DiffTextFormatter: Sendable {
     }
 
     func format(_ module: ModuleDiff) -> [String] {
-        let level = module.level == .file ? "files" : "targets"
-        var title = "\(module.name) (\(level))"
+        let noun = module.elementNoun
+        var title = "\(module.name) (\(noun))"
         if let directory = module.directory { title += " — \(directory)" }
         switch module.status {
         case .added: title += ": new"
@@ -36,7 +36,6 @@ public struct DiffTextFormatter: Sendable {
         case .compared: if module.isUnchanged { return [title + ": no change"] }
         }
         var lines = [title]
-        let noun = module.elementNoun
 
         var count = "  \(noun.capitalized): " + Self.change(module.base?.elementCount, module.head?.elementCount)
         let elementChanges = [module.addedElements.isEmpty ? nil : "+\(module.addedElements.count)",
@@ -136,17 +135,8 @@ extension DiagnosticFormatter {
                     let dependency = new.dependency
                     let path = FileDependencyGraphBuilder.displayPath(module.headPaths[dependency.from] ?? dependency.from, relativeTo: baseDirectory)
                     let text = message(for: new, change: change, module: module, base: diff.base)
-                    let line = dependency.line ?? 1, column = dependency.column ?? 1
-                    switch style {
-                    case .xcode:
-                        lines.append("\(path):\(line):\(column): note: \(text)")
-                    case .github:
-                        let properties = [
-                            "file=\(escapeProperty(path))", "line=\(line)", "col=\(column)",
-                            "title=\(escapeProperty("New dependency in a cycle (swift-modularity)"))",
-                        ]
-                        lines.append("::notice \(properties.joined(separator: ","))::\(escapeData(text))")
-                    }
+                    lines.append(note(text, title: "New dependency in a cycle (swift-modularity)", path: path,
+                                      at: dependency, style: style))
                 }
             }
         }

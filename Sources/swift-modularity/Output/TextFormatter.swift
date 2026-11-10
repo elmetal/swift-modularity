@@ -22,8 +22,7 @@ public struct TextFormatter: Sendable {
 
     public func format(_ module: ModuleReport) -> String {
         var lines: [String] = []
-        let level = module.level == .file ? "files" : "targets"
-        var title = "\(module.name) (\(level))"
+        var title = "\(module.name) (\(module.elementNoun))"
         if let directory = module.directory {
             title += " — \(directory)"
         }
@@ -154,11 +153,7 @@ public struct TextFormatter: Sendable {
                 // A few by default, as each candidate is one line among many; all with --limit 0.
                 let shownBlocking = limit > 0 ? Array(blocking.prefix(3)) : blocking
                 for dependency in shownBlocking {
-                    var line = "        \(dependency.from) → \(dependency.to)"
-                    if let symbol = dependency.symbol, let number = dependency.line {
-                        line += "  `\(symbol)` line \(number)"
-                    }
-                    lines.append(line + " (\(dependency.references) reference\(dependency.references == 1 ? "" : "s"))")
+                    lines.append("        " + Self.describe(dependency))
                 }
                 if shownBlocking.count < blocking.count {
                     lines.append("        … and \(blocking.count - shownBlocking.count) more (--limit 0 lists all)")
