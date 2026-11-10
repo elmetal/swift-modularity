@@ -36,11 +36,6 @@ public struct ExcludePattern: Sendable, Hashable, CustomStringConvertible {
         return Self.match(anchored[...], path.filter { $0 != "." && !$0.isEmpty }[...])
     }
 
-    /// Whether the pattern matches a path given as a string.
-    public func matches(path: String) -> Bool {
-        matches(pathComponents: path.split(separator: "/").map(String.init))
-    }
-
     private static func match(_ pattern: ArraySlice<String>, _ path: ArraySlice<String>) -> Bool {
         guard let head = pattern.first else { return path.isEmpty }
         if head == "**" {

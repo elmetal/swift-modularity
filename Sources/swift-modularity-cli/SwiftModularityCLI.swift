@@ -1,6 +1,4 @@
 import ArgumentParser
-import Foundation
-import swift_modularity
 
 @main
 struct SwiftModularityCLI: AsyncParsableCommand {

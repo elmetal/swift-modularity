@@ -3,7 +3,7 @@ import Foundation
 // MARK: - File Reading Utilities
 
 /// Provides file reading utilities for Swift source files.
-public class FileReader {
+public enum FileReader {
 
     /// Finds all Swift files in a directory.
     /// - Parameters:
