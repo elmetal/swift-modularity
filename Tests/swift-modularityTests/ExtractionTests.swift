@@ -33,6 +33,15 @@ import Testing
         #expect(features.canBeUpperTarget == false)  // App.swift depends on it
         let profile = candidates()["Features/Profile/"]!
         #expect(!profile.canBeLowerTarget && !profile.canBeUpperTarget)
+
+        // Nothing outside Features/ depends on it, and it uses Core.swift.
+        let graph = DependencyGraph(names: ["Core.swift", "Features/P.swift", "Features/Q.swift"],
+                                    dependencies: [("Features/P.swift", "Features/Q.swift"), ("Features/Q.swift", "Core.swift")])
+        let upper = Extraction.directoryCandidates(in: ModularityAnalysis(graph: graph))
+        #expect(upper.map(\.directory) == ["Features/"])
+        #expect(upper[0].canBeUpperTarget && !upper[0].canBeLowerTarget && !upper[0].isBlocked)
+        #expect(upper[0].outgoing.map { graph.nodes[$0.to].name } == ["Core.swift"])
+        #expect(upper[0].requiredFiles.map { graph.nodes[$0].name } == ["Core.swift"])
     }
 
     @Test func blockedWithRequiredFiles() {
