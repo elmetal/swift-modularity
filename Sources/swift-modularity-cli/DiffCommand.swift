@@ -148,8 +148,8 @@ struct DiffCommand: AsyncParsableCommand {
         if !paths.isEmpty {
             // The default name comes from the working tree's paths: in an export, `.` would be
             // named after the temporary directory, and the two sides would not match.
-            let workingTreeName = URL(fileURLWithPath: paths[0], relativeTo: URL(fileURLWithPath: FileManager.default.currentDirectoryPath))
-                .standardizedFileURL.lastPathComponent
+            let workingTreeName = URL(fileURLWithPath: PathResolver.resolve(paths[0], against: FileManager.default.currentDirectoryPath))
+                .lastPathComponent
             let module = try await Analyze.files(paths, name: name ?? workingTreeName, currentDirectory: directory,
                                                  config: config, skipMissing: true)
             return ModularityReport(modules: module.map { [$0] } ?? [])
@@ -161,8 +161,7 @@ struct DiffCommand: AsyncParsableCommand {
             let data = try Data(contentsOf: URL(fileURLWithPath: packageDescription))
             package = try JSONDecoder().decode(PackageDescription.self, from: data)
         } else {
-            let packageDirectory = URL(fileURLWithPath: targetOptions.packagePath, relativeTo: URL(fileURLWithPath: directory))
-                .standardizedFileURL.path
+            let packageDirectory = PathResolver.resolve(targetOptions.packagePath, against: directory)
             guard FileManager.default.fileExists(atPath: packageDirectory + "/Package.swift") else {
                 throw PackageLoader.LoadError(description: "\(side.name) has no Package.swift in \(targetOptions.packagePath)")
             }

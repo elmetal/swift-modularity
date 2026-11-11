@@ -12,8 +12,7 @@ enum Analyze {
     ///     base); nil when none exists.
     static func files(_ paths: [String], name: String?, currentDirectory: String, config: ModularityConfig,
                       skipMissing: Bool = false) async throws -> ModuleReport? {
-        let current = URL(fileURLWithPath: currentDirectory)
-        let resolved = paths.map { URL(fileURLWithPath: $0, relativeTo: current).standardizedFileURL.path }
+        let resolved = paths.map { PathResolver.resolve($0, against: currentDirectory) }
         let existing = skipMissing ? resolved.filter { FileManager.default.fileExists(atPath: $0) } : resolved
         guard let first = resolved.first, !existing.isEmpty else { return nil }
 
@@ -21,7 +20,7 @@ enum Analyze {
         // Name files relative to the directory given, or to the current directory.
         var isDirectory: ObjCBool = false
         FileManager.default.fileExists(atPath: first, isDirectory: &isDirectory)
-        let base = resolved.count == 1 && isDirectory.boolValue ? first : current.standardizedFileURL.path
+        let base = resolved.count == 1 && isDirectory.boolValue ? first : PathResolver.resolve(".", against: currentDirectory)
         let moduleName = name ?? URL(fileURLWithPath: first).lastPathComponent
         return await module(files, name: moduleName, directory: paths.joined(separator: ", "),
                             relativeTo: base, thresholds: config.thresholds)
