@@ -56,23 +56,12 @@ public enum CycleBreaking {
         }
     }
 
-    /// The sizes of the cyclic groups left in `group` of `graph` when the dependency `from → to` is
-    /// removed, largest first. If `from → to` is not a dependency inside the group, the group is
-    /// left as it is.
-    public static func remainingGroupSizes(in graph: DependencyGraph, group: [Int], removing from: Int, _ to: Int) -> [Int] {
-        remainingGroupSizes(in: graph, group: group, removing: [(from, to)])
-    }
-
     /// The sizes of the cyclic groups left in `group` of `graph` when all of `dependencies` are
     /// removed together, largest first. Dependencies that are not inside the group are ignored.
     public static func remainingGroupSizes(in graph: DependencyGraph, group: [Int], removing dependencies: [DependencyGraph.Edge]) -> [Int] {
-        remainingGroupSizes(in: graph, group: group, removing: dependencies.map { ($0.from, $0.to) })
-    }
-
-    private static func remainingGroupSizes(in graph: DependencyGraph, group: [Int], removing dependencies: [(Int, Int)]) -> [Int] {
         let local = Dictionary(uniqueKeysWithValues: group.enumerated().map { ($1, $0) })
         let successors = group.map { member in graph.successors[member].compactMap { local[$0] } }
-        let removed = dependencies.compactMap { from, to in local[from].flatMap { f in local[to].map { (f, $0) } } }
+        let removed = dependencies.compactMap { edge in local[edge.from].flatMap { from in local[edge.to].map { (from, $0) } } }
         return remainingGroupSizes(successors, removing: removed)
     }
 

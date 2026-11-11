@@ -71,7 +71,7 @@ public struct TextFormatter: Sendable {
                 lines.append("       Removing one of these dependencies splits it:")
                 let shown = limit > 0 ? Array(group.breakingDependencies.prefix(limit)) : group.breakingDependencies
                 for breaking in shown {
-                    lines.append("         " + Self.describe(breaking, groupSize: group.size, noun: module.elementNoun))
+                    lines.append("         " + Self.describe(breaking, noun: module.elementNoun))
                 }
                 if shown.count < group.breakingDependencies.count {
                     lines.append("         … and \(group.breakingDependencies.count - shown.count) more (--limit 0 lists all)")
@@ -215,7 +215,7 @@ public struct TextFormatter: Sendable {
     }
 
     /// "A.swift → B.swift  `Foo` line 12 (3 references): largest group left 9 files (9 + 2)"
-    static func describe(_ breaking: ModuleReport.BreakingDependencyReport, groupSize: Int, noun: String) -> String {
+    static func describe(_ breaking: ModuleReport.BreakingDependencyReport, noun: String) -> String {
         describe(breaking.dependency) + ": " + remaining(breaking.remainingGroups, noun: noun)
     }
 

@@ -135,7 +135,7 @@ public struct ModularityAnalysis: Sendable {
             view = .corePeriphery
             groups = (0..<graph.count).map {
                 Self.group(fanIn: visibility.fanIn[$0], fanOut: visibility.fanOut[$0],
-                           fanInThreshold: coreFanIn, fanOutThreshold: coreFanOut, high: .central)
+                           fanInThreshold: coreFanIn, fanOutThreshold: coreFanOut)
             }
             for member in core {
                 groups[member] = .core
@@ -144,7 +144,7 @@ public struct ModularityAnalysis: Sendable {
             view = .median
             groups = (0..<graph.count).map {
                 Self.group(fanIn: visibility.fanIn[$0], fanOut: visibility.fanOut[$0],
-                           fanInThreshold: medianFanIn, fanOutThreshold: medianFanOut, high: .central)
+                           fanInThreshold: medianFanIn, fanOutThreshold: medianFanOut)
             }
         }
 
@@ -210,11 +210,11 @@ public struct ModularityAnalysis: Sendable {
     /// threshold is on the high side (VFI ≥ threshold, VFO ≥ threshold). So when a median is 1,
     /// its minimum (as when most elements are unrelated to the rest), every element is on the
     /// high side of that axis: with median VFI 1 there is no Peripheral-M or Control-M, and with
-    /// median VFO 1 no Shared-M or Peripheral-M.
-    static func group(fanIn: Int, fanOut: Int, fanInThreshold: Double, fanOutThreshold: Double, high: ComponentGroup) -> ComponentGroup {
+    /// median VFO 1 no Shared-M or Peripheral-M. The members of the Core are set apart afterwards.
+    static func group(fanIn: Int, fanOut: Int, fanInThreshold: Double, fanOutThreshold: Double) -> ComponentGroup {
         switch (Double(fanIn) >= fanInThreshold, Double(fanOut) >= fanOutThreshold) {
         case (true, false): return .shared
-        case (true, true): return high
+        case (true, true): return .central
         case (false, false): return .peripheral
         case (false, true): return .control
         }

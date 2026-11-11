@@ -1,5 +1,3 @@
-import Foundation
-
 // MARK: - Modularity Diff
 
 /// The changes between two reports of the same code: what `swift-modularity-cli diff` writes.
