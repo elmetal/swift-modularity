@@ -189,6 +189,21 @@ import Testing
         ])
     }
 
+    @Test func membersAtTheStartOfASelfChain() {
+        // `self.state.count`: `state` is a member of the enclosing type, as in `self.state`.
+        let result = dependencies([
+            ("Renderer.swift", "struct Renderer {}"),
+            ("Renderer+State.swift", "extension Renderer { var state: [Int] { [] }\n static var shared: [Renderer] { [] } }"),
+            ("Use.swift", "extension Renderer { func run() -> Int { self.state.count } }"),
+            ("UseStatic.swift", "extension Renderer { func all() -> Int { Self.shared.count } }"),
+        ])
+        #expect(result == [
+            "Renderer+State.swift → Renderer.swift",
+            "Use.swift → Renderer.swift", "Use.swift → Renderer+State.swift",
+            "UseStatic.swift → Renderer.swift", "UseStatic.swift → Renderer+State.swift",
+        ])
+    }
+
     @Test func membersThroughTypeNames() {
         let result = dependencies([
             ("Config.swift", "enum Config {}"),

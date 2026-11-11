@@ -607,18 +607,18 @@ final class ReferenceCollector: SyntaxVisitor {
     }
 
     override func visit(_ node: MemberAccessExprSyntax) -> SyntaxVisitorContinueKind {
-        // Only the outermost access of a chain: `A.b.c` is handled once, as a whole.
-        if let parent = node.parent?.as(MemberAccessExprSyntax.self), parent.base?.id == node.id {
-            return .visitChildren
-        }
         let memberName = node.declName.baseName.identifierText
 
-        // `self.member`, `Self.member`
+        // `self.member`, `Self.member`, also at the start of a chain (`self.member.other`).
         if let base = node.base?.as(DeclReferenceExprSyntax.self),
            base.baseName.tokenKind == .keyword(.self) || base.baseName.tokenKind == .keyword(.Self) {
             if !path.isEmpty, let files = symbols.member(memberName, of: path.joined(separator: "."), use: MemberUse(ExprSyntax(node))) {
                 record(files, symbol: "\(path.last!).\(memberName)", at: node)
             }
+            return .visitChildren
+        }
+        // Only the outermost access of a chain: `A.b.c` is handled once, as a whole.
+        if let parent = node.parent?.as(MemberAccessExprSyntax.self), parent.base?.id == node.id {
             return .visitChildren
         }
 
