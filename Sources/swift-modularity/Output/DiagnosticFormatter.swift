@@ -27,25 +27,31 @@ public enum DiagnosticFormatter {
                 for breaking in group.breakingDependencies where breaking.reduction == best {
                     let dependency = breaking.dependency
                     let path = FileDependencyGraphBuilder.displayPath(paths[dependency.from] ?? dependency.from, relativeTo: baseDirectory)
-                    let line = dependency.line ?? 1
-                    let column = dependency.column ?? 1
                     let text = message(for: breaking, group: group, number: index + 1, module: module)
-                    switch style {
-                    case .xcode:
-                        lines.append("\(path):\(line):\(column): note: \(text)")
-                    case .github:
-                        let properties = [
-                            "file=\(escapeProperty(path))",
-                            "line=\(line)",
-                            "col=\(column)",
-                            "title=\(escapeProperty("Dependency that splits a cycle (swift-modularity)"))",
-                        ]
-                        lines.append("::notice \(properties.joined(separator: ","))::\(escapeData(text))")
-                    }
+                    lines.append(note(text, title: "Dependency that splits a cycle (swift-modularity)", path: path,
+                                      at: dependency, style: style))
                 }
             }
         }
         return lines.joined(separator: "\n")
+    }
+
+    /// One note at the first reference of `dependency` in the file at `path`.
+    static func note(_ text: String, title: String, path: String, at dependency: ModuleReport.Dependency, style: Style) -> String {
+        let line = dependency.line ?? 1
+        let column = dependency.column ?? 1
+        switch style {
+        case .xcode:
+            return "\(path):\(line):\(column): note: \(text)"
+        case .github:
+            let properties = [
+                "file=\(escapeProperty(path))",
+                "line=\(line)",
+                "col=\(column)",
+                "title=\(escapeProperty(title))",
+            ]
+            return "::notice \(properties.joined(separator: ","))::\(escapeData(text))"
+        }
     }
 
     /// "removing the dependency on Parser.swift (`Parser`, 3 references) splits cyclic group 1 of
@@ -56,15 +62,7 @@ public enum DiagnosticFormatter {
         if let symbol = dependency.symbol { text += "`\(symbol)`, " }
         text += "\(dependency.references) reference\(dependency.references == 1 ? "" : "s")) splits cyclic group \(number) of \(group.size) files in \(module.name)"
         if group.isCore { text += " (the Core)" }
-        if let largest = breaking.remainingGroups.first {
-            text += ": largest group left \(largest) files"
-            if breaking.remainingGroups.count > 1 {
-                text += " (" + breaking.remainingGroups.map(String.init).joined(separator: " + ") + ")"
-            }
-        } else {
-            text += ": no cycle left"
-        }
-        return text + " [swift-modularity]"
+        return text + ": " + TextFormatter.remaining(breaking.remainingGroups, noun: "files") + " [swift-modularity]"
     }
 
     static func escapeData(_ text: String) -> String {
