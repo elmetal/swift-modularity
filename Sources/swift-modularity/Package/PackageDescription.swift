@@ -39,20 +39,27 @@ public struct PackageDescription: Sendable, Codable, Equatable {
         public func swiftFiles(excluding patterns: [ExcludePattern] = []) throws -> [String] {
             guard let directory else { return [] }
             let files = try FileReader.findSwiftFiles(in: directory, excluding: patterns)
-            let sources = sources?.map(Self.components)
-            let exclude = (exclude ?? []).map(Self.components)
+            let sources = sources.map { Set($0.map(Self.normalized)) }
+            let exclude = Set((exclude ?? []).map(Self.normalized))
             guard sources != nil || !exclude.isEmpty else { return files }
             return files.filter { file in
-                // FileReader spells the files under `directory` as given.
-                let relative = Self.components(String(file.dropFirst(directory.count)))
-                if let sources, !sources.contains(where: { relative.starts(with: $0) }) { return false }
-                return !exclude.contains { relative.starts(with: $0) }
+                // FileReader spells the files under `directory` as given. A listed path covers
+                // the file itself and, for a directory, everything under it: look up the file's
+                // path and each directory above it (the plugin lists every file of the target).
+                let relative = Self.normalized(String(file.dropFirst(directory.count)))
+                var prefixes: Set<String> = ["", relative]
+                for index in relative.indices where relative[index] == "/" {
+                    prefixes.insert(String(relative[..<index]))
+                }
+                if let sources, sources.isDisjoint(with: prefixes) { return false }
+                return exclude.isDisjoint(with: prefixes)
             }
         }
 
-        /// The components of a relative path, without `.` and empty ones.
-        private static func components(_ path: String) -> [Substring] {
-            path.split(separator: "/").filter { $0 != "." }
+        /// A relative path without `.` and empty components (`./Main/` is `Main`; the directory
+        /// itself is the empty string).
+        private static func normalized(_ path: String) -> String {
+            path.split(separator: "/").filter { $0 != "." }.joined(separator: "/")
         }
 
         /// Whether the target has Swift sources that can be analyzed.
