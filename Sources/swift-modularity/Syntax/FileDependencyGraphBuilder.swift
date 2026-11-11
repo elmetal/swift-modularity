@@ -25,9 +25,10 @@ import SwiftSyntax
 ///   (`.helper`) are not resolved: that needs the type of the value. A key path is resolved up to
 ///   its first member (`\Model.name`); without its root (`\.name`), only when one extension of a
 ///   type of another module, or else one type of the module, has a member of that name.
-/// - Names are matched by text. Local variables, parameters and generic parameters shadow other
-///   names; overloads are not told apart, so a name declared in several files depends on all of
-///   them.
+/// - Names are matched by text. Parameters, generic parameters and what a body declares (local
+///   variables, functions and types) shadow other names. Overloads of a member are told apart by
+///   their argument labels only, and those of a top-level function not at all, so a name declared
+///   alike in several files depends on all of them.
 /// - Declarations and references inside `#if` blocks count whatever the condition.
 public struct FileDependencyGraphBuilder: Sendable {
     public init() {}
@@ -434,6 +435,7 @@ final class ReferenceCollector: SyntaxVisitor {
     // MARK: Types and extensions
 
     private func enterType(_ name: TokenSyntax, generics: GenericParameterClauseSyntax?) {
+        declareLocal(name)
         context.append(path + [name.identifierText])
         scopes.append(Set(generics?.parameters.map { $0.name.identifierText } ?? []))
     }
@@ -504,16 +506,29 @@ final class ReferenceCollector: SyntaxVisitor {
         bodyDepth -= 1
     }
 
+    /// A name declared inside a body (a variable, a function, a type) is local from here on in
+    /// the enclosing scope: it is not a declaration of the module, and it shadows those.
+    private func declareLocal(_ name: TokenSyntax) {
+        if bodyDepth > 0, !scopes.isEmpty {
+            scopes[scopes.count - 1].insert(name.identifierText)
+        }
+    }
+
     private static func parameterNames(_ clause: FunctionParameterClauseSyntax) -> [String] {
         clause.parameters.map { ($0.secondName ?? $0.firstName).identifierText }
     }
 
     override func visit(_ node: FunctionDeclSyntax) -> SyntaxVisitorContinueKind {
+        declareLocal(node.name)
         let generics = node.genericParameterClause?.parameters.map { $0.name.identifierText } ?? []
         enterBody(generics + Self.parameterNames(node.signature.parameterClause))
         return .visitChildren
     }
     override func visitPost(_ node: FunctionDeclSyntax) { exitBody() }
+
+    override func visit(_ node: TypeAliasDeclSyntax) -> SyntaxVisitorContinueKind {
+        declareLocal(node.name); return .visitChildren
+    }
 
     override func visit(_ node: InitializerDeclSyntax) -> SyntaxVisitorContinueKind {
         let generics = node.genericParameterClause?.parameters.map { $0.name.identifierText } ?? []
@@ -566,9 +581,7 @@ final class ReferenceCollector: SyntaxVisitor {
     /// Names bound by patterns inside bodies (`let x`, `if let x`, `for x in`, `case .a(let x)`)
     /// are local from here on in the enclosing scope.
     override func visit(_ node: IdentifierPatternSyntax) -> SyntaxVisitorContinueKind {
-        if bodyDepth > 0, !scopes.isEmpty {
-            scopes[scopes.count - 1].insert(node.identifier.identifierText)
-        }
+        declareLocal(node.identifier)
         return .skipChildren
     }
 

@@ -250,7 +250,8 @@ the names it declares are collected, and file A depends on file B when A refers 
 
 An extension depends on the file declaring the extended type. `private` and `fileprivate`
 declarations are visible only in their own file, and DocC catalogs (`*.docc`) are skipped.
-Parameters, local variables and generic parameters shadow other names. Known limits:
+Parameters, generic parameters and what a function body declares (local variables, functions and
+types) shadow other names. Known limits:
 
 - **Members reached through a value are not resolved.** `text.indented()`, where `indented` is
   added by an extension in another file, or an implicit member expression such as `.default`, needs

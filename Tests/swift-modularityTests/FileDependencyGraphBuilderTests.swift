@@ -125,6 +125,26 @@ import Testing
         #expect(result.isEmpty)
     }
 
+    @Test func localFunctionsAndTypesShadowTheModulesNames() {
+        let result = dependencies([
+            ("Globals.swift", "func helper() {}\nstruct Row { static func make() -> Row { Row() } }\ntypealias ID = Int\nfunc shared() {}"),
+            ("Shadowing.swift", """
+                func run() {
+                    func helper() {}
+                    struct Row { var id = 0 }
+                    typealias ID = String
+                    helper()
+                    let rows: [Row] = [Row()]
+                    let id: ID = ""
+                    _ = (rows, id)
+                }
+                """),
+            // Outside the body that declares them, the names are the module's again.
+            ("Using.swift", "func first() { func shared() {} }\nfunc second() { shared() }"),
+        ])
+        #expect(result == ["Using.swift → Globals.swift"])
+    }
+
     @Test func membersAccessedThroughValuesAreNotResolved() {
         // `helper` is added by an extension in another file, but members are not resolved.
         let result = dependencies([
