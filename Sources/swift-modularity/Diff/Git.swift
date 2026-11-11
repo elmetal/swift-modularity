@@ -36,9 +36,10 @@ public struct Git: Sendable {
         } catch {
             throw GitError(description: "Could not run git: \(error.localizedDescription)")
         }
-        // Read both pipes before waiting, so that a full pipe cannot block git.
+        // Read both pipes at once: git would block on a full pipe while only the other is read.
+        let errorReader = PipeReader(errors.fileHandleForReading)
         let data = output.fileHandleForReading.readDataToEndOfFile()
-        let errorData = errors.fileHandleForReading.readDataToEndOfFile()
+        let errorData = errorReader.wait()
         process.waitUntilExit()
         guard process.terminationStatus == 0 else {
             let message = String(decoding: errorData, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)

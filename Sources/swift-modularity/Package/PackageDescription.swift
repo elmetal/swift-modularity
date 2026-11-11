@@ -138,24 +138,6 @@ public enum PackageLoader {
         }
     }
 
-    /// Reads a pipe to its end on another thread.
-    private final class PipeReader: @unchecked Sendable {
-        private var data = Data()
-        private let done = DispatchSemaphore(value: 0)
-
-        init(_ handle: FileHandle) {
-            Thread.detachNewThread { [self] in
-                data = handle.readDataToEndOfFile()
-                done.signal()
-            }
-        }
-
-        func wait() -> Data {
-            done.wait()
-            return data
-        }
-    }
-
     /// Parses the JSON written by `swift package dump-package`.
     public static func parseDumpPackage(_ data: Data, packageDirectory: String) throws -> PackageDescription {
         guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],

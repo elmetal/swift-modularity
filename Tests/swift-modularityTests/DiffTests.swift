@@ -170,6 +170,13 @@ private let gitIsAvailable = (try? Git(directory: FileManager.default.currentDir
         #expect(throws: Git.GitError.self) { try git.commit("no-such-branch") }
     }
 
+    @Test(.timeLimit(.minutes(1))) func errorOutputLargerThanAPipeDoesNotBlock() throws {
+        let (git, root) = try makeRepository()
+        defer { try? FileManager.default.removeItem(at: root) }
+        // More than a pipe holds (64 KB), written to standard error before standard output closes.
+        #expect(try git.run(["-c", "alias.noisy=!head -c 200000 /dev/zero >&2; echo done", "noisy"]) == "done")
+    }
+
     @Test func exportsARevisionWithoutWritingToTheRepository() throws {
         let (git, root) = try makeRepository()
         defer { try? FileManager.default.removeItem(at: root) }
