@@ -189,4 +189,16 @@ private let gitIsAvailable = (try? Git(directory: FileManager.default.currentDir
         export.remove()
         #expect(!FileManager.default.fileExists(atPath: export.path))
     }
+
+    @Test func exportsTheWholeTreeFromASubdirectory() throws {
+        let (git, root) = try makeRepository()
+        defer { try? FileManager.default.removeItem(at: root) }
+        // `diff` runs git in the current directory, and its paths may lead out of it (`../Other`).
+        let subdirectory = root.appendingPathComponent("Sub")
+        try FileManager.default.createDirectory(at: subdirectory, withIntermediateDirectories: true)
+        let export = try Git(directory: subdirectory.path).export(git.commit("feature"))
+        defer { export.remove() }
+        #expect(FileManager.default.fileExists(atPath: export.path + "/A.swift"))
+        #expect(FileManager.default.fileExists(atPath: export.path + "/B.swift"))
+    }
 }

@@ -91,14 +91,17 @@ public struct Git: Sendable {
     /// The tree is read into a temporary index file and checked out from it, rather than with
     /// `git worktree add`, which records the worktree in `.git`.
     public func export(_ commit: String) throws -> Export {
+        // From the root of the working tree: run in a subdirectory, `checkout-index --all` writes
+        // only the files under it, and paths that lead out of it (`../Other`) would be missing.
+        let repository = Git(directory: try topLevel())
         let root = URL(fileURLWithPath: NSTemporaryDirectory()).resolvingSymlinksInPath()
             .appendingPathComponent("swift-modularity-\(UUID().uuidString)")
         let export = Export(root: root.path)
         do {
             try FileManager.default.createDirectory(atPath: export.path, withIntermediateDirectories: true)
             let index = ["GIT_INDEX_FILE": root.appendingPathComponent("index").path]
-            try run(["read-tree", commit], environment: index)
-            try run(["checkout-index", "--all", "--prefix=\(export.path)/"], environment: index)
+            try repository.run(["read-tree", commit], environment: index)
+            try repository.run(["checkout-index", "--all", "--prefix=\(export.path)/"], environment: index)
         } catch {
             export.remove()
             throw error
