@@ -72,7 +72,7 @@ struct ModularityPlugin: CommandPlugin {
         default:
             process.arguments = ["package", "--package-description", descriptionURL.path] + arguments
         }
-        // Tells the tool that it runs in the plugin's sandbox (see `DiffCommand`).
+        // Tells the tool that it runs in the plugin's sandbox (see `runsInPluginSandbox`).
         process.environment = ProcessInfo.processInfo.environment.merging(["SWIFT_MODULARITY_PLUGIN": "1"]) { $1 }
         // Run in the package directory, so that `modularity.toml` there is found and GitHub
         // annotation paths are relative to it.

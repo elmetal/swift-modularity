@@ -167,14 +167,10 @@ struct DiffCommand: AsyncParsableCommand {
                 throw PackageLoader.LoadError(description: "\(side.name) has no Package.swift in \(targetOptions.packagePath)")
             }
             // In the plugin's sandbox, SwiftPM cannot start the sandbox it compiles manifests in.
-            let inPluginSandbox = ProcessInfo.processInfo.environment[Self.pluginEnvironmentKey] != nil
-            package = try PackageLoader.load(packageDirectory: packageDirectory, disableSandbox: inPluginSandbox)
+            package = try PackageLoader.load(packageDirectory: packageDirectory, disableSandbox: runsInPluginSandbox)
         }
         return try await Analyze.package(package, options: targetOptions, config: config, skipMissingTargets: true)
     }
-
-    /// Set by the command plugin (see `ModularityPlugin`).
-    static let pluginEnvironmentKey = "SWIFT_MODULARITY_PLUGIN"
 
     /// Replaces the `from` prefix of the paths in `report` with `to`.
     static func relocate(_ report: ModularityReport, from: String, to: String) -> ModularityReport {
