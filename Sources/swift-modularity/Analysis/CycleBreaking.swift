@@ -22,10 +22,11 @@ public struct BreakingDependency: Sendable, Equatable {
 
 /// Finds the dependencies whose removal splits a cyclic group.
 ///
-/// For each dependency between two members of a group, the strongly connected components of the
-/// group without that dependency are computed exactly. Only dependencies that make the largest
-/// remaining group smaller than the group are returned. Removing a dependency means removing every
-/// reference from one file to the other; how many there are is `edge.referenceCount`.
+/// For each dependency between two members of a group that can split it (see
+/// `spanningDependencies`), the strongly connected components of the group without that
+/// dependency are computed exactly. Only dependencies that make the largest remaining group
+/// smaller than the group are returned. Removing a dependency means removing every reference from
+/// one file to the other; how many there are is `edge.referenceCount`.
 ///
 /// The result is exact for the given graph. A graph built from syntax can miss dependencies (see
 /// `FileDependencyGraphBuilder`), and a missing dependency can keep a group together that this
@@ -33,15 +34,17 @@ public struct BreakingDependency: Sendable, Equatable {
 public enum CycleBreaking {
     /// The dependencies that split `group`, the most effective first: the largest reduction, then
     /// the fewest references, then by file names.
+    /// - Parameter group: A cyclic group of `graph` (as in `ModularityAnalysis.cyclicGroups`).
     public static func breakingDependencies(in graph: DependencyGraph, group: [Int]) -> [BreakingDependency] {
         guard group.count >= 2 else { return [] }
         let local = Dictionary(uniqueKeysWithValues: group.enumerated().map { ($1, $0) })
         // The group's own subgraph, in local indices.
         let successors = group.map { member in graph.successors[member].compactMap { local[$0] } }
+        let candidates = spanningDependencies(successors)
 
         var result: [BreakingDependency] = []
         for (from, targets) in successors.enumerated() {
-            for to in targets {
+            for to in targets where candidates.contains(from * group.count + to) {
                 let remaining = remainingGroupSizes(successors, removing: [(from, to)])
                 guard (remaining.first ?? 0) < group.count,
                       let edge = graph.edge(from: group[from], to: group[to]) else { continue }
@@ -74,5 +77,37 @@ public enum CycleBreaking {
             .map(\.count)
             .filter { $0 >= 2 }
             .sorted(by: >)
+    }
+
+    /// The only dependencies of a strongly connected graph whose removal can split it, as
+    /// `from * count + to`: those of a spanning tree out of the first element and of one into it.
+    /// Without any other dependency both trees are whole, so every element still reaches the first
+    /// and is reached from it. At most 2 · (count − 1) dependencies, however many the graph has.
+    private static func spanningDependencies(_ successors: [[Int]]) -> Set<Int> {
+        let count = successors.count
+        var predecessors = Array(repeating: [Int](), count: count)
+        for (from, targets) in successors.enumerated() {
+            for to in targets {
+                predecessors[to].append(from)
+            }
+        }
+        var result: Set<Int> = []
+        // Breadth first from the first element: along the dependencies, then against them.
+        for (neighbors, outward) in [(successors, true), (predecessors, false)] {
+            var visited = Array(repeating: false, count: count)
+            visited[0] = true
+            var queue = [0]
+            var next = 0
+            while next < queue.count {
+                let node = queue[next]
+                next += 1
+                for neighbor in neighbors[node] where !visited[neighbor] {
+                    visited[neighbor] = true
+                    queue.append(neighbor)
+                    result.insert(outward ? node * count + neighbor : neighbor * count + node)
+                }
+            }
+        }
+        return result
     }
 }

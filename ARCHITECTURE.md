@@ -71,10 +71,13 @@ Tests check V against Figure 4 of the paper and against Warshall's algorithm on 
 ## Dependencies that split a cyclic group
 
 `CycleBreaking` takes each cyclic group's own subgraph and, for each dependency between two
-members, recomputes the strongly connected components without it (Tarjan, O(V + E) per
-dependency, so O(E · (V + E)) per group). A dependency is reported when the largest component
-left is smaller than the group; they are ranked by the reduction, then by the number of
-references, then by name. Pairs or sets of dependencies are not searched: the smallest set that
+members that can split it, recomputes the strongly connected components without it (Tarjan,
+O(V + E) per dependency). Only the dependencies of a spanning tree out of one member and of a
+spanning tree into it can: without any other dependency both trees are whole, so every member
+still reaches that member and is reached from it. That is at most 2 · (V − 1) dependencies, so
+O(V · (V + E)) per group however many dependencies it has. A dependency is reported when the
+largest component left is smaller than the group; they are ranked by the reduction, then by the
+number of references, then by name. Pairs or sets of dependencies are not searched: the smallest set that
 removes every cycle (a minimum feedback arc set) is NP-hard, and one dependency at a time is what
 one change does.
 
